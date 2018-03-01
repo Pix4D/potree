@@ -1,126 +1,67 @@
-import { Box3, Matrix4, Plane, Vector3 } from 'three';
-import { PointCloudOctree } from './point-cloud-octree';
+import { Matrix4, Vector3 } from 'three';
+import { PointCloudOctree } from '../point-cloud-octree';
+import { PointCloudOctreeGeometryNode } from '../point-cloud-octree-geometry-node';
 import { Points } from './points';
-
-export interface Profile {
-  points: any[];
-}
-
-interface ProfileCallback {
-  onProgress(event: { request: ProfileRequest; points: ProfileData }): void;
-  onFinish(event: { request: ProfileRequest }): void;
-  onCancel(): void;
-}
-
-interface ProfileSegment {
-  start: Vector3;
-  end: Vector3;
-  cutPlane: Plane;
-  halfPlane: Plane;
-  length: number;
-  points: Points;
-}
-
-export class ProfileData {
-  boundingBox = new Box3();
-  segments: ProfileSegment[];
-
-  constructor(public profile: Profile) {
-    for (let i = 0; i < profile.points.length - 1; i++) {
-      const start: Vector3 = profile.points[i];
-      const end: Vector3 = profile.points[i + 1];
-
-      const startGround = new Vector3(start.x, start.y, 0);
-      const endGround = new Vector3(end.x, end.y, 0);
-
-      const center = new Vector3().addVectors(endGround, startGround).multiplyScalar(0.5);
-      const length = startGround.distanceTo(endGround);
-      const side = new Vector3().subVectors(endGround, startGround).normalize();
-      const up = new Vector3(0, 0, 1);
-      const forward = new Vector3().crossVectors(side, up).normalize();
-      const N = forward;
-      const cutPlane = new Plane().setFromNormalAndCoplanarPoint(N, startGround);
-      const halfPlane = new Plane().setFromNormalAndCoplanarPoint(side, center);
-
-      this.segments.push({
-        start: start,
-        end: end,
-        cutPlane: cutPlane,
-        halfPlane: halfPlane,
-        length: length,
-        points: new Points(),
-      });
-    }
-  }
-
-  size() {
-    let size = 0;
-    for (let i = 0; i < this.segments.length; ++i) {
-      size += this.segments[i].points.numPoints;
-    }
-
-    return size;
-  }
-}
-
-const getLRU = () => {
-  return null;
-};
+import { ProfileData } from './profile-data';
+import { IProfile, IProfileData, IProfileRequest, IProfileRequestCallbacks } from './types';
 
 // const makePriorityQueue = () => new BinaryHeap(x => 1 / x.weight);
 const makePriorityQueue = () => null as any;
 
-export class ProfileRequest {
-  private temporaryResult: ProfileData = new ProfileData(this.profile);
+export class ProfileRequest implements IProfileRequest {
   pointsServed: number = 0;
   highestLevelServed: number = 0;
-  priorityQueue = makePriorityQueue();
+
+  private temporaryResult: IProfileData = new ProfileData(this.profile);
+  private priorityQueue = makePriorityQueue();
 
   private cancelRequested: boolean = false;
 
   constructor(
     public pointcloud: PointCloudOctree,
-    public profile: Profile,
+    public profile: IProfile,
     public maxDepth: number,
-    public callback: ProfileCallback,
+    public callback: IProfileRequestCallbacks,
   ) {
     this.initialize();
   }
 
-  initialize() {
+  private initialize() {
     this.priorityQueue.push({
       node: this.pointcloud.pcoGeometry.root,
       weight: 1,
     });
+
     this.traverse(this.pointcloud.pcoGeometry.root);
   }
 
   // traverse the node and add intersecting descendants to queue
-  traverse(node) {
-    const stack = [];
-    for (let i = 0; i < 8; i++) {
-      const child = node.children[i];
+  private traverse(node: PointCloudOctreeGeometryNode) {
+    const stack: PointCloudOctreeGeometryNode[] = [];
+
+    this.addIntersectedChildren(node, stack);
+
+    let current: PointCloudOctreeGeometryNode | undefined;
+    while ((current = stack.pop())) {
+      const weight = current.boundingSphere.radius;
+
+      this.priorityQueue.push({ node: current, weight: weight });
+
+      if (current.level < this.maxDepth) {
+        this.addIntersectedChildren(current, stack);
+      }
+    }
+  }
+
+  private addIntersectedChildren(
+    node: PointCloudOctreeGeometryNode,
+    stack: PointCloudOctreeGeometryNode[],
+  ) {
+    node.getChildren().forEach(child => {
       if (child && this.pointcloud.nodeIntersectsProfile(child, this.profile)) {
         stack.push(child);
       }
-    }
-
-    while (stack.length > 0) {
-      const stackNode = stack.pop()!;
-      const weight = stackNode.boundingSphere.radius;
-
-      this.priorityQueue.push({ node: stackNode, weight: weight });
-
-      // add children that intersect the cutting plane
-      if (stackNode.level < this.maxDepth) {
-        for (let i = 0; i < 8; i++) {
-          const child = stackNode.children[i];
-          if (child && this.pointcloud.nodeIntersectsProfile(child, this.profile)) {
-            stack.push(child);
-          }
-        }
-      }
-    }
+    });
   }
 
   update() {
@@ -130,7 +71,7 @@ export class ProfileRequest {
     // only evaluate 1-50 nodes per frame to maintain responsiveness
 
     const maxNodesPerUpdate = 1;
-    const intersectedNodes = [];
+    const intersectedNodes: PointCloudOctreeGeometryNode[] = [];
 
     for (let i = 0; i < Math.min(maxNodesPerUpdate, this.priorityQueue.size()); i++) {
       const element = this.priorityQueue.pop();
@@ -139,8 +80,8 @@ export class ProfileRequest {
       if (node.loaded) {
         // add points to result
         intersectedNodes.push(node);
-        getLRU().touch(node);
-        this.highestLevelServed = node.getLevel();
+        this.pointcloud.potree.getLRU().touch(node);
+        this.highestLevelServed = node.level;
 
         if (node.level % node.pcoGeometry.hierarchyStepSize === 0 && node.hasChildren) {
           this.traverse(node);
@@ -153,12 +94,9 @@ export class ProfileRequest {
 
     if (intersectedNodes.length > 0) {
       this.getPointsInsideProfile(intersectedNodes, this.temporaryResult);
-      if (this.temporaryResult.size() > 100) {
-        this.pointsServed += this.temporaryResult.size();
-        this.callback.onProgress({
-          request: this,
-          points: this.temporaryResult,
-        });
+      if (this.temporaryResult.size > 100) {
+        this.pointsServed += this.temporaryResult.size;
+        this.callback.onProgress({ request: this, points: this.temporaryResult });
         this.temporaryResult = new ProfileData(this.profile);
       }
     }
@@ -166,8 +104,8 @@ export class ProfileRequest {
     if (this.priorityQueue.size() === 0) {
       // we're done! inform callback and remove from pending requests
 
-      if (this.temporaryResult.size() > 0) {
-        this.pointsServed += this.temporaryResult.size();
+      if (this.temporaryResult.size > 0) {
+        this.pointsServed += this.temporaryResult.size;
         this.callback.onProgress({
           request: this,
           points: this.temporaryResult,
@@ -184,13 +122,13 @@ export class ProfileRequest {
     }
   }
 
-  getPointsInsideProfile(nodes, target) {
+  getPointsInsideProfile(nodes: PointCloudOctreeGeometryNode[], target: IProfileData) {
     let totalMileage = 0;
 
     for (const segment of target.segments) {
       for (const node of nodes) {
         const geometry = node.geometry;
-        const positions = geometry.attributes.position;
+        const positions = geometry.getAttribute('position');
         const p = positions.array;
         const numPoints = node.numPoints;
 
@@ -227,10 +165,10 @@ export class ProfileRequest {
         }
 
         for (const attribute of Object.keys(geometry.attributes).filter(a => a !== 'indices')) {
-          const bufferedAttribute = geometry.attributes[attribute];
-          const type = bufferedAttribute.array.constructor;
+          const bufferedAttribute: any = geometry.getAttribute(attribute);
+          const type: any = bufferedAttribute.array.constructor;
 
-          let filteredBuffer = null;
+          let filteredBuffer: any = null;
 
           if (attribute === 'position') {
             filteredBuffer = new type(acceptedPositions);

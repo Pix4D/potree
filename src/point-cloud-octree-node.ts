@@ -1,65 +1,53 @@
-import { Box3, Matrix4, Object3D, Sphere, Vector3, Vector4 } from 'three';
-import { PointCloudMaterial, PointSizeType } from './materials';
+import { Box3, EventDispatcher, Matrix4, Object3D, Points, Sphere, Vector3, Vector4 } from 'three';
+import { PointSizeType } from './materials/enums';
+import { PointCloudMaterial } from './materials/point-cloud-material';
 import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
-import { PointCloudTreeNode } from './point-cloud-tree-node';
+import { IPointCloudTreeNode } from './point-cloud-tree-node';
+import { IPointCloudOctree } from './types';
 
-interface IPointCloudOctree {}
-
-export class PointCloudOctreeNode extends PointCloudTreeNode {
-  sceneNode: Object3D | null = null;
-  children: (PointCloudOctreeNode | undefined)[] = [];
+export class PointCloudOctreeNode extends EventDispatcher implements IPointCloudTreeNode {
+  needsTransformUpdate: boolean = true;
+  sceneNode: Points | null = null;
+  children: (IPointCloudTreeNode | undefined)[] = [];
   pcoGeometry: PointCloudOctreeGeometry;
-  boundingBox: Box3;
-  boundingSphere: Sphere;
   material: PointCloudMaterial;
   visiblePointsTarget: number;
   minimumNodePixelSize: number;
   showBoundingBox: boolean;
-  boundingBoxNodes: any[];
+  boundingBoxNode: Object3D | null = null;
   loadQueue: any[];
   visibleBounds: Box3;
   visibleNodes: PointCloudOctreeNode;
   visibleGeometry: PointCloudOctreeGeometry[];
-  generateDEM: boolean;
   profileRequests: any[];
   pointSizeType: PointSizeType;
   pointcloud: IPointCloudOctree;
+  pcIndex?: number;
+  readonly loaded = true;
 
   constructor(public geometryNode: PointCloudOctreeGeometryNode) {
     super();
   }
 
-  getNumPoints(): number {
+  get numPoints(): number {
     return this.geometryNode.numPoints;
   }
 
-  isLoaded(): boolean {
-    return true;
-  }
-
-  isTreeNode(): boolean {
-    return true;
-  }
-
-  isGeometryNode(): boolean {
-    return false;
-  }
-
-  getLevel(): number {
+  get level(): number {
     return this.geometryNode.level;
   }
 
-  getBoundingSphere() {
+  get boundingSphere(): Sphere {
     return this.geometryNode.getBoundingSphere();
   }
 
-  getBoundingBox() {
+  get boundingBox() {
     return this.geometryNode.getBoundingBox();
   }
 
-  getChildren(): PointCloudOctreeNode[] {
-    const children: PointCloudOctreeNode[] = [];
+  getChildren(): IPointCloudTreeNode[] {
+    const children: IPointCloudTreeNode[] = [];
 
     for (let i = 0; i < 8; i++) {
       const child = this.children[i];
@@ -108,6 +96,10 @@ export class PointCloudOctreeNode extends PointCloudTreeNode {
     }
 
     return inBox;
+  }
+
+  get spacing() {
+    return this.geometryNode.spacing;
   }
 
   get name() {

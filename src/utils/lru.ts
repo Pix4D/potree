@@ -1,8 +1,8 @@
-type Node = {
-  id: string;
+export type Node = {
+  id: number;
   loaded: boolean;
   numPoints: number;
-  children: Node[];
+  children: (Node | undefined)[];
   dispose(): void;
 };
 
@@ -22,7 +22,7 @@ export class LRU {
   last: LRUItem | null = null;
   numPoints: number = 0;
 
-  private items = new Map<string, LRUItem>();
+  private items = new Map<number, LRUItem>();
 
   constructor(private pointLoadLimit: number = 1_000_000) {}
 

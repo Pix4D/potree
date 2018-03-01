@@ -5,11 +5,11 @@
 
 import { ajax } from 'rxjs/observable/dom/ajax';
 import { switchMap, take } from 'rxjs/operators';
-import { notNil } from 'shared/rx';
-import { Box3, BufferGeometry, Sphere, Vector3 } from 'three';
-import { createChildAABB } from './loadPOC';
+import { Box3, BufferGeometry, EventDispatcher, Sphere, Vector3 } from 'three';
 import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
-import { PointCloudTreeNode } from './point-cloud-tree-node';
+import { IPointCloudTreeNode } from './point-cloud-tree-node';
+import { createChildAABB } from './utils/bounds';
+import { notNil } from './utils/rx';
 
 interface NodeData {
   children: number;
@@ -19,8 +19,9 @@ interface NodeData {
 
 const NODE_STRIDE = 5;
 
-export class PointCloudOctreeGeometryNode extends PointCloudTreeNode {
+export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPointCloudTreeNode {
   id: number = PointCloudOctreeGeometryNode.idCount++;
+  needsTransformUpdate: boolean = true;
   name: string;
   pcoGeometry: PointCloudOctreeGeometry;
   index: number;
@@ -42,11 +43,7 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode {
 
   private static idCount = 0;
 
-  constructor(
-    name: string,
-    pcoGeometry: PointCloudOctreeGeometry,
-    boundingBox: Box3,
-  ) {
+  constructor(name: string, pcoGeometry: PointCloudOctreeGeometry, boundingBox: Box3) {
     super();
 
     this.name = name;
@@ -55,20 +52,8 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode {
     this.index = parseInt(name.charAt(name.length - 1), 10);
   }
 
-  isGeometryNode() {
-    return true;
-  }
-
-  getLevel(): number {
-    return this.level;
-  }
-
   isTreeNode() {
     return false;
-  }
-
-  isLoaded(): boolean {
-    return this.loaded;
   }
 
   getBoundingSphere(): Sphere {
@@ -92,12 +77,15 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode {
     return children;
   }
 
-  getURL(): string {
+  /**
+   * Gets the url of the binary file for this node.
+   */
+  getUrl(): string {
     const geometry = this.pcoGeometry;
-    const pathParts = [geometry.s3Key, geometry.octreeDir];
+    const pathParts = [geometry.octreeDir];
 
     if (geometry.loader && geometry.loader.version.equalOrHigher('1.5')) {
-      pathParts.push(this.getHierarchyPath());
+      pathParts.push(this.getHierarchyBaseUrl());
     }
 
     pathParts.push(this.name);
@@ -105,17 +93,11 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode {
     return pathParts.join('/');
   }
 
-  getHierarchyPath(): string {
-    const hierarchyStepSize = this.pcoGeometry.hierarchyStepSize;
-    const indices = this.name.substr(1);
-    const numParts = Math.floor(indices.length / hierarchyStepSize);
-
-    let path = 'r/';
-    for (let i = 0; i < numParts; i++) {
-      path += `${indices.substr(i * hierarchyStepSize, hierarchyStepSize)}/`;
-    }
-
-    return path.slice(0, -1);
+  /**
+   * Gets the url of the hierarchy file for this node.
+   */
+  getHierarchyUrl(): string {
+    return [this.pcoGeometry.octreeDir, this.getHierarchyBaseUrl(), `${this.name}.hrc`].join('/');
   }
 
   addChild(child: PointCloudOctreeGeometryNode): void {
@@ -150,21 +132,30 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode {
   }
 
   loadHierachyThenPoints(): void {
-    const geometry = this.pcoGeometry;
-    if (!geometry.sign || this.level % this.pcoGeometry.hierarchyStepSize !== 0 || ) {
+    if (this.level % this.pcoGeometry.hierarchyStepSize !== 0) {
       return;
     }
 
-    const s3Key = [
-      geometry.s3Key,
-      geometry.octreeDir,
-      this.getHierarchyPath(),
-      `${this.name}.hrc`,
-    ].join('/');
-
-    geometry.sign({ s3Bucket: this.pcoGeometry.s3Bucket, s3Key })
+    this.pcoGeometry.loader
+      .getUrl(this.getHierarchyUrl())
       .pipe(take(1), notNil(), switchMap(url => this.loadHierarchyData(url)))
       .subscribe(e => this.loadHierarchy(this, e.response));
+  }
+
+  /**
+   * Gets the url of the folder where the hierarchy is, relative to the octreeDir.
+   */
+  private getHierarchyBaseUrl(): string {
+    const hierarchyStepSize = this.pcoGeometry.hierarchyStepSize;
+    const indices = this.name.substr(1);
+    const numParts = Math.floor(indices.length / hierarchyStepSize);
+
+    let path = 'r/';
+    for (let i = 0; i < numParts; i++) {
+      path += `${indices.substr(i * hierarchyStepSize, hierarchyStepSize)}/`;
+    }
+
+    return path.slice(0, -1);
   }
 
   private loadHierarchyData(url: string) {
@@ -194,7 +185,7 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode {
     let offset = NODE_STRIDE;
     let stackNodeData;
 
-    while (stackNodeData = stack.shift()) {
+    while ((stackNodeData = stack.shift())) {
       // From the last bit, all the way to the 8th one from the right.
       let mask = 1;
       for (let i = 0; i < 8; i++) {
@@ -267,7 +258,7 @@ export class PointCloudOctreeGeometryNode extends PointCloudTreeNode {
     }
 
     this.geometry.dispose();
-    this.geometry = null;
+    this.geometry = new BufferGeometry();
     this.loaded = false;
 
     this.oneTimeDisposeHandlers.forEach(handler => handler());

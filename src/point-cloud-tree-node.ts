@@ -1,33 +1,13 @@
-import { Box3, EventDispatcher, Sphere } from 'three';
+import { Box3, Sphere } from 'three';
 
-export class PointCloudTreeNode extends EventDispatcher {
-  needsTransformUpdate = true;
+export interface IPointCloudTreeNode {
+  needsTransformUpdate: boolean;
+  spacing: number;
+  level: number;
+  boundingBox: Box3;
+  boundingSphere: Sphere;
+  loaded: boolean;
+  numPoints: number;
 
-  getChildren(): PointCloudTreeNode[] {
-    throw new Error('override function');
-  }
-
-  getBoundingBox(): Box3 {
-    throw new Error('override function');
-  }
-
-  isLoaded(): boolean {
-    throw new Error('override function');
-  }
-
-  isGeometryNode(): boolean {
-    throw new Error('override function');
-  }
-
-  isTreeNode(): boolean {
-    throw new Error('override function');
-  }
-
-  getLevel(): number {
-    throw new Error('override function');
-  }
-
-  getBoundingSphere(): Sphere {
-    throw new Error('override function');
-  }
+  getChildren(): IPointCloudTreeNode[];
 }

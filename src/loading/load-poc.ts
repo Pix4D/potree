@@ -2,17 +2,18 @@
 // Converted to Typescript and adapted from https://github.com/potree/potree
 // -------------------------------------------------------------------------------------------------
 
+import { Observable } from 'rxjs/Observable';
 import { ajax } from 'rxjs/observable/dom/ajax';
 import { flatMap, map, take } from 'rxjs/operators';
-import { notNil } from 'shared/rx';
-import { S3UrlInfo } from 'shared/types';
 import { Box3, Vector3 } from 'three';
-import { Progress, SignFn } from '../loading/types';
+import { PointAttributeNameType, PointAttributes } from '../point-attributes';
+import { PointCloudOctreeGeometry } from '../point-cloud-octree-geometry';
+import { PointCloudOctreeGeometryNode } from '../point-cloud-octree-geometry-node';
+import { createChildAABB } from '../utils/bounds';
+import { notNil } from '../utils/rx';
+import { Version } from '../version';
 import { BinaryLoader } from './binary-loader';
-import { PointAttributeNameType, PointAttributes } from './point-attributes';
-import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
-import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
-import { Version } from './version';
+import { GetUrlFn } from './types';
 
 interface BoundingBoxData {
   lx: number;
@@ -36,47 +37,51 @@ interface POCJson {
   tightBoundingBox?: BoundingBoxData;
 }
 
+/**
+ *
+ * @param url$
+ *    Observable which emits the url of the point cloud file (usually cloud.js).
+ * @param signRelativeUrl
+ *    Function which receives the relative URL of a point cloud chunk file which is to be loaded
+ *    and shoud return an observable which emits the new url.
+ *
+ * @returns
+ *    An observable which emits once when the first LOD of the point cloud is loaded.
+ */
 export function loadPOC(
-  s3UrlInfo: S3UrlInfo,
-  sign: SignFn,
-  onSuccess: (geometry: PointCloudOctreeGeometry) => void,
-  _: (progress: Progress) => void,
-  onError: (error: Error) => void,
-) {
-  sign(s3UrlInfo)
-    .pipe(
-      notNil(),
-      take(1),
-      flatMap(url => {
-        return ajax({
-          url,
-          method: 'GET',
-          responseType: 'text',
-          async: true,
-          crossDomain: true,
-        }).pipe(map(e => JSON.parse(e.response)), map(parse(url, s3UrlInfo, sign)));
-      }),
-    )
-    .subscribe(onSuccess, onError);
+  url$: Observable<string>,
+  getUrl: GetUrlFn,
+): Observable<PointCloudOctreeGeometry> {
+  return url$.pipe(
+    notNil(),
+    take(1),
+    flatMap(url => {
+      return ajax({
+        url,
+        method: 'GET',
+        responseType: 'text',
+        async: true,
+        crossDomain: true,
+      }).pipe(map(e => JSON.parse(e.response)), map(parse(url, getUrl)));
+    }),
+  );
 }
 
-function parse(url: string, s3UrlInfo: S3UrlInfo, sign: SignFn) {
+function parse(url: string, getUrl: GetUrlFn) {
   return (data: POCJson): PointCloudOctreeGeometry => {
     const { offset, boundingBox, tightBoundingBox } = getBoundingBoxes(data);
-    const loader = new BinaryLoader(data.version, boundingBox, data.scale);
+
+    const loader = new BinaryLoader({
+      getUrl,
+      version: data.version,
+      boundingBox,
+      scale: data.scale,
+    });
+
     const pco = new PointCloudOctreeGeometry(loader, boundingBox, tightBoundingBox, offset);
+
     pco.url = url;
     pco.needsUpdate = true;
-
-    // Store the necessary information for the modified PointCloudOctreeGeometryNode to be able to
-    // sign urls and load tiles.
-    pco.sign = sign;
-    pco.s3Bucket = s3UrlInfo.s3Bucket;
-    pco.s3Key = s3UrlInfo.s3Key
-      .split('/')
-      .slice(0, -1) // Exclude the name since we only want the base path
-      .join('/');
-
     pco.octreeDir = data.octreeDir;
     pco.spacing = data.spacing;
     pco.hierarchyStepSize = data.hierarchyStepSize;
@@ -177,33 +182,4 @@ function parseName(name: string): { index: number; parentName: string; level: nu
     parentName: name.substring(0, name.length - 1),
     level: name.length - 1,
   };
-}
-
-export function createChildAABB(aabb: Box3, index: number): Box3 {
-  const min = aabb.min.clone();
-  const max = aabb.max.clone();
-  const size = new Vector3().subVectors(max, min);
-
-  // tslint:disable-next-line:no-bitwise
-  if ((index & 0b0001) > 0) {
-    min.z += size.z / 2;
-  } else {
-    max.z -= size.z / 2;
-  }
-
-  // tslint:disable-next-line:no-bitwise
-  if ((index & 0b0010) > 0) {
-    min.y += size.y / 2;
-  } else {
-    max.y -= size.y / 2;
-  }
-
-  // tslint:disable-next-line:no-bitwise
-  if ((index & 0b0100) > 0) {
-    min.x += size.x / 2;
-  } else {
-    max.x -= size.x / 2;
-  }
-
-  return new Box3(min, max);
 }

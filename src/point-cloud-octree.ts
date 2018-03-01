@@ -1,11 +1,8 @@
 import {
-  Box2,
   Box3,
-  Camera,
-  Geometry,
+  BufferAttribute,
   Line3,
   LinearFilter,
-  Matrix4,
   NearestFilter,
   NoBlending,
   Object3D,
@@ -19,21 +16,22 @@ import {
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three';
-import { PointCloudMaterial, PointColorType, PointSizeType } from './materials';
+import { PointColorType, PointSizeType } from './materials/enums';
+import { PointCloudMaterial } from './materials/point-cloud-material';
 import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
 import { PointCloudOctreeNode } from './point-cloud-octree-node';
 import { PointCloudTree } from './point-cloud-tree';
-import { computeTransformedBoundingBox } from './utils/utils';
+import { IPointCloudTreeNode } from './point-cloud-tree-node';
+import { IProfile, IProfileRequestCallbacks, ProfileRequest } from './profile';
+import { IPotree } from './types';
+import { computeTransformedBoundingBox } from './utils/bounds';
+import { clamp } from './utils/math';
+import { intersectSphereBack } from './utils/utils';
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(Math.max(min, value), max);
-
-interface PickParams {
+export interface PickParams {
   pickWindowSize: number;
 }
-
-type Node = PointCloudOctreeNode | PointCloudOctreeGeometryNode;
 
 export class PointCloudOctree extends PointCloudTree {
   pcoGeometry: PointCloudOctreeGeometry;
@@ -41,17 +39,22 @@ export class PointCloudOctree extends PointCloudTree {
   boundingSphere: Sphere;
   material: PointCloudMaterial;
   level: number = 0;
+  maxLevel: number = Infinity;
   visiblePointsTarget: number = 2 * 1000 * 1000;
   minimumNodePixelSize: number = 100;
   showBoundingBox: boolean = false;
-  boundingBoxNodes: any[] = [];
+  boundingBoxNodes: Object3D[] = [];
   loadQueue: any[] = [];
   visibleBounds: Box3 = new Box3();
-  visibleNodes: Node[] = [];
+  visibleNodes: PointCloudOctreeNode[] = [];
+  numVisibleNodes: number = 0;
+  numVisiblePoints: number = 0;
+  deepestVisibleLevel: number = 0;
   visibleGeometry: PointCloudOctreeGeometry[] = [];
-  profileRequests: any[] = [];
+  profileRequests: ProfileRequest[] = [];
   pointSizeType: PointSizeType;
   pointBudget: number = Infinity;
+  root: IPointCloudTreeNode | null = null;
 
   private pickState:
     | {
@@ -61,7 +64,11 @@ export class PointCloudOctree extends PointCloudTree {
       }
     | undefined;
 
-  constructor(geometry: PointCloudOctreeGeometry, material?: PointCloudMaterial) {
+  constructor(
+    public potree: IPotree,
+    geometry: PointCloudOctreeGeometry,
+    material?: PointCloudMaterial,
+  ) {
     super();
 
     this.name = '';
@@ -104,8 +111,42 @@ export class PointCloudOctree extends PointCloudTree {
     return this.name;
   }
 
+  updateProfileRequests(): void {
+    const start = performance.now();
+
+    for (let i = 0; i < this.profileRequests.length; i++) {
+      const profileRequest = this.profileRequests[i];
+
+      profileRequest.update();
+
+      const duration = performance.now() - start;
+      if (duration > 5) {
+        break;
+      }
+    }
+  }
+
+  nodeIntersectsProfile(node: IPointCloudTreeNode, profile: IProfile) {
+    const bbWorld = node.boundingBox.clone().applyMatrix4(this.matrixWorld);
+    const bsWorld = bbWorld.getBoundingSphere();
+
+    let intersects = false;
+
+    for (let i = 0; i < profile.points.length - 1; i++) {
+      const start = new Vector3(profile.points[i + 0].x, profile.points[i + 0].y, bsWorld.center.z);
+      const end = new Vector3(profile.points[i + 1].x, profile.points[i + 1].y, bsWorld.center.z);
+
+      const closest = new Line3(start, end).closestPointToPoint(bsWorld.center, true);
+      const distance = closest.distanceTo(bsWorld.center);
+
+      intersects = intersects || distance < bsWorld.radius + profile.width;
+    }
+
+    return intersects;
+  }
+
   toTreeNode(geometryNode: PointCloudOctreeGeometryNode, parent: any) {
-    const node: any = new PointCloudOctreeNode(geometryNode);
+    const node = new PointCloudOctreeNode(geometryNode);
 
     const sceneNode = new Points(geometryNode.geometry, this.material);
     sceneNode.name = geometryNode.name;
@@ -119,7 +160,7 @@ export class PointCloudOctree extends PointCloudTree {
         renderer.getContext().useProgram(material.program.program);
 
         if (material.program.getUniforms().map.level) {
-          const level = geometryNode.getLevel();
+          const level = geometryNode.level;
           material.uniforms.level.value = level;
           material.program.getUniforms().map.level.setValue(renderer.getContext(), level);
         }
@@ -172,8 +213,9 @@ export class PointCloudOctree extends PointCloudTree {
       const node = this.visibleNodes[i];
       let isLeaf = true;
 
-      for (let j = 0; j < node.children.length; j++) {
-        const child = node.children[j];
+      const children = node.getChildren();
+      for (let j = 0; j < children.length; j++) {
+        const child = children[j];
         if (child instanceof PointCloudOctreeNode) {
           isLeaf = Boolean(isLeaf && child.sceneNode && !child.sceneNode.visible);
         } else if (child instanceof PointCloudOctreeGeometryNode) {
@@ -191,8 +233,8 @@ export class PointCloudOctree extends PointCloudTree {
     for (let i = 0; i < leafNodes.length; i++) {
       const node = leafNodes[i];
 
-      this.visibleBounds.expandByPoint(node.getBoundingBox().min);
-      this.visibleBounds.expandByPoint(node.getBoundingBox().max);
+      this.visibleBounds.expandByPoint(node.boundingBox.min);
+      this.visibleBounds.expandByPoint(node.boundingBox.max);
     }
   }
 
@@ -209,13 +251,12 @@ export class PointCloudOctree extends PointCloudTree {
 
   computeVisibilityTextureData(nodes: PointCloudOctreeNode[], camera: PerspectiveCamera) {
     const data = new Uint8Array(nodes.length * 4);
-    const visibleNodeTextureOffsets = new Map();
+    const visibleNodeTextureOffsets = new Map<PointCloudOctreeNode, number>();
 
-    // copy array
-    nodes = nodes.slice();
+    nodes = [...nodes];
 
     // sort by level and index, e.g. r, r0, r3, r4, r01, r07, r30, ...
-    const sort = function(a: any, b: any) {
+    nodes.sort((a: PointCloudOctreeNode, b: PointCloudOctreeNode) => {
       const na = a.geometryNode.name;
       const nb = b.geometryNode.name;
       if (na.length !== nb.length) {
@@ -228,46 +269,21 @@ export class PointCloudOctree extends PointCloudTree {
         return 1;
       }
       return 0;
-    };
-    nodes.sort(sort);
+    });
 
-    // code sample taken from three.js src/math/Ray.js
-    const v1 = new Vector3();
-    const intersectSphereBack = (ray: Ray, sphere: Sphere) => {
-      v1.subVectors(sphere.center, ray.origin);
-      const tca = v1.dot(ray.direction);
-      const d2 = v1.dot(v1) - tca * tca;
-      const radius2 = sphere.radius * sphere.radius;
-
-      if (d2 > radius2) {
-        return null;
-      }
-
-      const thc = Math.sqrt(radius2 - d2);
-
-      // t1 = second intersect point - exit point on back of sphere
-      const t1 = tca + thc;
-
-      if (t1 < 0) {
-        return null;
-      }
-
-      return t1;
-    };
-
-    const lodRanges = new Map();
-    const leafNodeLodRanges = new Map();
+    const lodRanges = new Map<number, number>();
+    const leafNodeLodRanges = new Map<PointCloudOctreeNode, { distance: number; i: number }>();
 
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
 
       visibleNodeTextureOffsets.set(node, i);
 
-      const children = [];
+      const children: PointCloudOctreeNode[] = [];
       for (let j = 0; j < 8; j++) {
         const child = node.children[j];
 
-        if (child && child.constructor === PointCloudOctreeNode && nodes.includes(child, i)) {
+        if (child && child instanceof PointCloudOctreeNode && nodes.includes(child, i)) {
           children.push(child);
         }
       }
@@ -275,7 +291,7 @@ export class PointCloudOctree extends PointCloudTree {
       data[i * 4 + 0] = 0;
       data[i * 4 + 1] = 0;
       data[i * 4 + 2] = 0;
-      data[i * 4 + 3] = node.getLevel();
+      data[i * 4 + 3] = node.level;
 
       for (let j = 0; j < children.length; j++) {
         const child = children[j];
@@ -292,7 +308,7 @@ export class PointCloudOctree extends PointCloudTree {
       }
 
       {
-        const bBox: Box3 = node.getBoundingBox().clone();
+        const bBox: Box3 = node.boundingBox.clone();
         bBox.applyMatrix4(camera.matrixWorldInverse);
 
         const bSphere = bBox.getBoundingSphere();
@@ -307,34 +323,28 @@ export class PointCloudOctree extends PointCloudTree {
 
         distance = Math.max(distance, distance2);
 
-        if (!lodRanges.has(node.getLevel())) {
-          lodRanges.set(node.getLevel(), distance);
-        } else {
-          const prevDistance = lodRanges.get(node.getLevel());
-          const newDistance = Math.max(prevDistance, distance);
-          lodRanges.set(node.getLevel(), newDistance);
-        }
+        const prevDistance = lodRanges.get(node.level);
+        lodRanges.set(
+          node.level,
+          prevDistance === undefined ? distance : Math.max(prevDistance, distance),
+        );
 
         if (!node.geometryNode.hasChildren) {
-          const value = {
-            distance: distance,
-            i: i,
-          };
-          leafNodeLodRanges.set(node, value);
+          leafNodeLodRanges.set(node, { distance, i });
         }
       }
     }
 
-    for (const [node, value] of leafNodeLodRanges) {
+    leafNodeLodRanges.forEach(value => {
       const distance = value.distance;
       const i = value.i;
 
-      for (const [lod, range] of lodRanges) {
+      lodRanges.forEach((range, lod) => {
         if (distance < range * 1.2) {
           data[i * 4 + 3] = lod;
         }
-      }
-    }
+      });
+    });
 
     return {
       data: data,
@@ -342,7 +352,7 @@ export class PointCloudOctree extends PointCloudTree {
     };
   }
 
-  nodesOnRay(nodes: PointCloudOctreeGeometryNode[], ray: Ray): PointCloudOctreeNode[] {
+  nodesOnRay(nodes: PointCloudOctreeNode[], ray: Ray): PointCloudOctreeNode[] {
     const nodesOnRay: PointCloudOctreeNode[] = [];
 
     const rayClone = ray.clone();
@@ -350,10 +360,7 @@ export class PointCloudOctree extends PointCloudTree {
       const node = nodes[i];
       // let inverseWorld = new Matrix4().getInverse(node.matrixWorld);
       // let sphere = node.getBoundingSphere().clone().applyMatrix4(node.sceneNode.matrixWorld);
-      const sphere = node
-        .getBoundingSphere()
-        .clone()
-        .applyMatrix4(this.matrixWorld);
+      const sphere = node.boundingSphere.clone().applyMatrix4(this.matrixWorld);
 
       if (rayClone.intersectsSphere(sphere)) {
         nodesOnRay.push(node);
@@ -443,7 +450,7 @@ export class PointCloudOctree extends PointCloudTree {
     const width = Math.ceil(renderer.domElement.clientWidth);
     const height = Math.ceil(renderer.domElement.clientHeight);
 
-    const nodes = this.nodesOnRay(this.visibleNodes, ray);
+    const nodes: PointCloudOctreeNode[] = this.nodesOnRay(this.visibleNodes, ray);
 
     if (nodes.length === 0) {
       return null;
@@ -500,19 +507,19 @@ export class PointCloudOctree extends PointCloudTree {
 
     const tempNodes = [];
     for (let i = 0; i < nodes.length; i++) {
-      const node: any = nodes[i];
+      const node = nodes[i];
       node.pcIndex = i + 1;
       const sceneNode = node.sceneNode;
       if (!sceneNode) {
         continue;
       }
 
-      const tempNode: any = new Points(sceneNode.geometry, pickMaterial);
+      const tempNode = new Points(sceneNode.geometry, pickMaterial);
       tempNode.matrix = sceneNode.matrix;
       tempNode.matrixWorld = sceneNode.matrixWorld;
       tempNode.matrixAutoUpdate = false;
       tempNode.frustumCulled = false;
-      tempNode.pcIndex = i + 1;
+      (tempNode as any).pcIndex = i + 1;
 
       const geometryNode = node.geometryNode;
       const material: any = pickMaterial;
@@ -521,7 +528,7 @@ export class PointCloudOctree extends PointCloudTree {
           renderer.getContext().useProgram(material.program.program);
 
           if (material.program.getUniforms().map.level) {
-            const level = geometryNode.getLevel();
+            const level = geometryNode.level;
             material.uniforms.level.value = level;
             material.program.getUniforms().map.level.setValue(renderer.getContext(), level);
           }
@@ -596,16 +603,17 @@ export class PointCloudOctree extends PointCloudTree {
     if (hit) {
       point = {};
 
-      if (!nodes[hit.pcIndex]) {
+      const node = nodes[hit.pcIndex];
+      const pc = node && node.sceneNode;
+      if (!pc) {
         return null;
       }
 
-      const pc = nodes[hit.pcIndex].sceneNode;
-      const attributes = pc.geometry.attributes;
+      const attributes: BufferAttribute[] = (pc.geometry as any).attributes;
 
       for (const property in attributes) {
         if (attributes.hasOwnProperty(property)) {
-          const values = pc.geometry.attributes[property];
+          const values = attributes[property];
 
           if (property === 'position') {
             const positionArray = values.array;
@@ -635,6 +643,36 @@ export class PointCloudOctree extends PointCloudTree {
     }
 
     return point;
+  }
+
+  /**
+   * returns points inside the profile points
+   *
+   * maxDepth:		search points up to the given octree depth
+   *
+   *
+   * The return value is an array with all segments of the profile path
+   *  let segment = {
+   * 		start: 	THREE.Vector3,
+   * 		end: 	THREE.Vector3,
+   * 		points: {}
+   * 		project: function()
+   *  };
+   *
+   * The project() function inside each segment can be used to transform
+   * that segments point coordinates to line up along the x-axis.
+   *
+   *
+   */
+  getPointsInProfile(
+    profile: IProfile,
+    maxDepth: number,
+    callback: IProfileRequestCallbacks,
+  ): ProfileRequest {
+    const request = new ProfileRequest(this, profile, maxDepth, callback);
+    this.profileRequests.push(request);
+
+    return request;
   }
 
   private getPickState() {

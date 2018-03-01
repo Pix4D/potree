@@ -4,13 +4,14 @@
 
 import { Observable } from 'rxjs/Observable';
 import { ajax } from 'rxjs/observable/dom/ajax';
-import { empty } from 'rxjs/observable/empty';
+import { of } from 'rxjs/observable/of';
 import { flatMap, map, take } from 'rxjs/operators';
-import { notNil } from 'shared/rx/nil';
 import { Box3, BufferAttribute, BufferGeometry, Uint8BufferAttribute, Vector3 } from 'three';
 import { PointAttributeName, PointAttributeType } from '../point-attributes';
 import { PointCloudOctreeGeometryNode } from '../point-cloud-octree-geometry-node';
+import { notNil } from '../utils/rx';
 import { Version } from '../version';
+import { GetUrlFn } from './types';
 
 interface AttributeData {
   attribute: {
@@ -35,25 +36,37 @@ export class BinaryLoader {
   version: Version;
   boundingBox: Box3;
   scale: number;
+  getUrl: GetUrlFn;
   private workers: Worker[] = [];
 
-  constructor(version: string, boundingBox: Box3, scale: number) {
+  constructor({
+    getUrl = s => of(s),
+    version,
+    boundingBox,
+    scale,
+  }: {
+    getUrl?: GetUrlFn;
+    version: string;
+    boundingBox: Box3;
+    scale: number;
+  }) {
     if (typeof version === 'string') {
       this.version = new Version(version);
     } else {
       this.version = version;
     }
 
+    this.getUrl = getUrl;
     this.boundingBox = boundingBox;
     this.scale = scale;
   }
 
   load(node: PointCloudOctreeGeometryNode) {
-    if (node.isLoaded() || !(node.pcoGeometry as any).sign) {
+    if (node.loaded || !(node.pcoGeometry as any).sign) {
       return;
     }
 
-    this.getSignedUrl(node)
+    this.getUrl(this.getNodeUrl(node))
       .pipe(take(1), notNil(), flatMap(url => this.fetchData(url)))
       .subscribe(buffer => {
         this.parse(node, buffer);
@@ -75,18 +88,13 @@ export class BinaryLoader {
     }).pipe(map(e => e.response));
   }
 
-  private getSignedUrl(node: PointCloudOctreeGeometryNode): Observable<string | undefined> {
-    const { s3Bucket, sign } = node.pcoGeometry as any;
-    if (!sign || !s3Bucket) {
-      return empty<never>();
-    }
-
-    let unsignedUrl = node.getURL();
+  private getNodeUrl(node: PointCloudOctreeGeometryNode): string {
+    let url = node.getUrl();
     if (this.version.equalOrHigher('1.4')) {
-      unsignedUrl += '.bin';
+      url += '.bin';
     }
 
-    return sign({ s3Key: unsignedUrl, s3Bucket });
+    return url;
   }
 
   private parse = (
@@ -108,6 +116,10 @@ export class BinaryLoader {
 
     worker.onmessage = (e: WorkerResponse) => {
       const data = e.data;
+
+      if (!node.geometry) {
+        node.geometry = new BufferGeometry();
+      }
 
       this.addBufferAttributes(node.geometry, data.attributeBuffers);
       this.addNormalAttribute(node.geometry, numPoints);
@@ -137,9 +149,8 @@ export class BinaryLoader {
 
   private getNewWorker(): Promise<Worker> {
     return new Promise<Worker>(resolve => {
-      (require as any)(['worker-loader!./BinaryDecoderWorker.js'], (ctor: any) => {
-        resolve(new ctor());
-      });
+      const ctor = require('worker-loader?inline!../workers/binary-decoder-worker.js');
+      return resolve(new ctor());
     });
   }
 

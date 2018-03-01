@@ -1,13 +1,5 @@
 import { Box3 } from 'three';
-import { IPointAttribute } from './point-attributes';
-
-type PointsData = Record<string, any>;
-
-interface IPoints {
-  numPoints: number;
-  boundingBox: Box3;
-  data: PointsData;
-}
+import { IPoints, PointsData } from './types';
 
 export class Points implements IPoints {
   numPoints: number = 0;
@@ -26,8 +18,6 @@ export class Points implements IPoints {
     attributes.forEach(attribute => {
       if (thisAttributes.includes(attribute) && otherAttributes.includes(attribute)) {
         // attribute in both, merge
-
-        const attrData = this.data[attribute];
 
         // tslint:disable-next-line:variable-name
         const Type = this.data[attribute].constructor;

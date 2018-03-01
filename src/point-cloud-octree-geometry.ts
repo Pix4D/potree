@@ -1,7 +1,5 @@
-import { Observable } from 'rxjs/Observable';
-import { S3UrlInfo } from 'shared/types';
 import { Box3, Sphere, Vector3 } from 'three';
-import { BinaryLoader } from './binary-loader';
+import { BinaryLoader } from './loading';
 import { PointAttributes } from './point-attributes';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
 
@@ -17,9 +15,6 @@ export class PointCloudOctreeGeometry {
   pointAttributes: PointAttributes = new PointAttributes([]);
   projection: any = null;
   url: string | null = null;
-  s3Bucket: string = '';
-  s3Key: string = '';
-  sign: ((url: S3UrlInfo) => Observable<string | undefined>) | undefined;
   needsUpdate: boolean = true;
 
   constructor(

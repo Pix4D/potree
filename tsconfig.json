@@ -3,7 +3,8 @@
   "compilerOptions": {
     "baseUrl": "./src/",
     "sourceMap": true,
-    "declaration": false,
+    "declaration": true,
+    "declarationDir": "declarations",
     "module": "esnext",
     "moduleResolution": "node",
     "strict": true,
@@ -18,5 +19,6 @@
     "typeRoots": ["node_modules/@types"],
     "lib": ["es2017", "dom"],
     "plugins": []
-  }
+  },
+  "exclude": ["build", "node_modules"]
 }

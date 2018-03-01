@@ -1,16 +1,20 @@
 {
-  "name": "typed-potree",
+  "name": "potree",
   "private": true,
   "version": "0.0.1",
   "description": "WebGL point cloud viewer",
+  "main": "build/potree.js",
+  "typings": "build/declarations/index.d.ts",
   "scripts": {
+    "clean": "rimraf build",
     "start": "webpack-dev-server --mode development",
-    "dev": "webpack --mode development",
-    "build": "webpack --mode production"
+    "dev": "npm run clean && webpack --mode development",
+    "build": "npm run clean && webpack --mode production"
   },
   "dependencies": {
     "@types/three": "^0.89.11",
     "process-nextick-args": "^2.0.0",
+    "rxjs": "^5.5.6",
     "safe-buffer": "^5.1.1",
     "three": "^0.90.0",
     "util-deprecate": "^1.0.2"
@@ -31,12 +35,15 @@
     "eslint-plugin-promise": "^3.6.0",
     "eslint-plugin-standard": "^3.0.1",
     "install": "^0.10.4",
+    "raw-loader": "^0.5.1",
+    "rimraf": "^2.6.2",
     "ts-loader": "^4.0.0",
     "tslint": "^5.9.1",
     "typescript": "^2.7.2",
     "webpack": "^4.0.1",
+    "webpack-bundle-analyzer": "^2.11.1",
     "webpack-cli": "^2.0.9",
     "webpack-dev-server": "^3.1.0",
-    "webpack-glsl-loader": "^1.0.1"
+    "worker-loader": "^1.1.1"
   }
 }

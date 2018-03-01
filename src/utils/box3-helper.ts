@@ -1,4 +1,11 @@
-import { BufferAttribute, BufferGeometry, LineBasicMaterial, LineSegments } from 'three';
+import {
+  Box3,
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  LineBasicMaterial,
+  LineSegments,
+} from 'three';
 
 /**
  *
@@ -11,11 +18,7 @@ import { BufferAttribute, BufferGeometry, LineBasicMaterial, LineSegments } from
  */
 
 export class Box3Helper extends LineSegments {
-  constructor(box, color) {
-    if (color === undefined) {
-      color = 0xffff00;
-    }
-
+  constructor(box: Box3, color: Color = new Color(0xffff00)) {
     // prettier-ignore
     const indices = new Uint16Array([ 0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7 ]);
     // prettier-ignore
