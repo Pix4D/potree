@@ -1,5 +1,5 @@
 import { Object3D } from 'three';
-import { IPointCloudTreeNode } from './point-cloud-tree-node';
+import { IPointCloudTreeNode } from './types';
 
 export class PointCloudTree extends Object3D {
   root: IPointCloudTreeNode | null;

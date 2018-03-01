@@ -22,9 +22,8 @@ import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
 import { PointCloudOctreeNode } from './point-cloud-octree-node';
 import { PointCloudTree } from './point-cloud-tree';
-import { IPointCloudTreeNode } from './point-cloud-tree-node';
 import { IProfile, IProfileRequestCallbacks, ProfileRequest } from './profile';
-import { IPotree } from './types';
+import { IPointCloudOctree, IPointCloudTreeNode, IPotree } from './types';
 import { computeTransformedBoundingBox } from './utils/bounds';
 import { clamp } from './utils/math';
 import { intersectSphereBack } from './utils/utils';
@@ -33,7 +32,7 @@ export interface PickParams {
   pickWindowSize: number;
 }
 
-export class PointCloudOctree extends PointCloudTree {
+export class PointCloudOctree extends PointCloudTree implements IPointCloudOctree {
   pcoGeometry: PointCloudOctreeGeometry;
   boundingBox: Box3;
   boundingSphere: Sphere;

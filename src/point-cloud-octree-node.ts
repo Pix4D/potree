@@ -3,8 +3,7 @@ import { PointSizeType } from './materials/enums';
 import { PointCloudMaterial } from './materials/point-cloud-material';
 import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
-import { IPointCloudTreeNode } from './point-cloud-tree-node';
-import { IPointCloudOctree } from './types';
+import { IPointCloudOctree, IPointCloudTreeNode } from './types';
 
 export class PointCloudOctreeNode extends EventDispatcher implements IPointCloudTreeNode {
   needsTransformUpdate: boolean = true;

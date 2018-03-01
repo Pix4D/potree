@@ -7,7 +7,7 @@ import { ajax } from 'rxjs/observable/dom/ajax';
 import { switchMap, take } from 'rxjs/operators';
 import { Box3, BufferGeometry, EventDispatcher, Sphere, Vector3 } from 'three';
 import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
-import { IPointCloudTreeNode } from './point-cloud-tree-node';
+import { IPointCloudTreeNode } from './types';
 import { createChildAABB } from './utils/bounds';
 import { notNil } from './utils/rx';
 

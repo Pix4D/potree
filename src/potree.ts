@@ -5,17 +5,10 @@ import { GetUrlFn, loadPOC } from './loading';
 import { PointCloudOctree } from './point-cloud-octree';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
 import { PointCloudOctreeNode } from './point-cloud-octree-node';
-import { IPointCloudTreeNode } from './point-cloud-tree-node';
-import { IPotree } from './types';
+import { IPointCloudTreeNode, IPotree, IVisibilityUpdateResult } from './types';
 import { BinaryHeap } from './utils/binary-heap';
 import { Box3Helper } from './utils/box3-helper';
 import { LRU } from './utils/lru';
-
-export interface VisibilityUpdateResult {
-  visibleNodes: PointCloudOctreeNode[];
-  numVisiblePoints: number;
-  lowestSpacing: number;
-}
 
 export interface QueueItem {
   weight: number;
@@ -38,7 +31,7 @@ export class Potree implements IPotree {
     pointClouds: PointCloudOctree[],
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
-  ): VisibilityUpdateResult {
+  ): IVisibilityUpdateResult {
     pointClouds.forEach(pointCloud => pointCloud.updateProfileRequests());
 
     const result = this.updateVisibility(pointClouds, camera, renderer);
@@ -66,11 +59,11 @@ export class Potree implements IPotree {
   //   return Potree.DEMWorkerInstance;
   // }
 
-  updateVisibility(
+  private updateVisibility(
     pointclouds: PointCloudOctree[],
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
-  ): VisibilityUpdateResult {
+  ): IVisibilityUpdateResult {
     let numVisiblePoints = 0;
 
     const numVisiblePointsInPointclouds = new Map<PointCloudOctree, number>();
@@ -255,7 +248,7 @@ export class Potree implements IPotree {
     };
   }
 
-  updateVisibilityStructures(
+  private updateVisibilityStructures(
     pointclouds: PointCloudOctree[],
     camera: PerspectiveCamera,
   ): {
