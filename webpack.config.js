@@ -1,6 +1,8 @@
 const path = require('path');
 // const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 const rxPaths = require('rxjs/_esm5/path-mapping');
+const CircularDependencyPlugin = require('circular-dependency-plugin');
+const ProgressBarPlugin = require('progress-bar-webpack-plugin');
 
 module.exports = {
   entry: './src/index.ts',
@@ -11,7 +13,7 @@ module.exports = {
     libraryTarget: 'umd',
     umdNamedDefine: true,
   },
-  devtool: 'inline-source-map',
+  devtool: 'cheap-eval-source-map',
   resolve: {
     extensions: ['.ts', '.tsx', '.js'],
     alias: rxPaths(),
@@ -33,4 +35,12 @@ module.exports = {
       },
     ],
   },
+  plugins: [
+    new CircularDependencyPlugin({
+      exclude: /node_modules/,
+      failOnError: true,
+      cwd: process.cwd(),
+    }),
+    new ProgressBarPlugin(),
+  ],
 };
