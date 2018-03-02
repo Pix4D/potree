@@ -38,8 +38,8 @@ export class PointCloudMaterial extends RawShaderMaterial {
   private _gradient = GRADIENTS.SPECTRAL;
   gradientTexture = generateGradientTexture(this._gradient);
 
-  private _classification: Classification;
-  classificationTexture: Texture;
+  private _classification: Classification = CLASSIFICATION.DEFAULT;
+  classificationTexture: Texture = generateClassificationTexture(this._classification);
 
   lights = false;
   fog = false;

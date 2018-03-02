@@ -1,7 +1,8 @@
+import { Observable } from 'rxjs/Observable';
 import { Box3, PerspectiveCamera, Sphere, WebGLRenderer } from 'three';
+import { GetUrlFn } from './loading/types';
+import { PointCloudOctree } from './point-cloud-octree';
 import { LRU } from './utils/lru';
-
-export interface IPointCloudOctree {}
 
 export interface IPointCloudTreeNode {
   needsTransformUpdate: boolean;
@@ -26,10 +27,13 @@ export interface IPotree {
   numNodesLoading: number;
   maxNodesLoading: number;
 
-  getLRU(): LRU;
+  loadPointCloud(url$: Observable<string>, getUrl: GetUrlFn): Observable<PointCloudOctree>;
+
   updatePointClouds(
-    pointClouds: IPointCloudOctree[],
+    pointClouds: PointCloudOctree[],
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
   ): IVisibilityUpdateResult;
+
+  getLRU(): LRU;
 }

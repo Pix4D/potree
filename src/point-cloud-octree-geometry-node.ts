@@ -31,13 +31,13 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
   boundingBox: Box3;
   tightBoundingBox: Box3;
   tightBoundingSphere: Sphere;
-  mean: Vector3;
+  mean: Vector3 = new Vector3();
   numPoints: number = 0;
   geometry: BufferGeometry = new BufferGeometry();
   loaded: boolean = false;
-  loading: boolean;
-  boundingSphere: Sphere = this.boundingBox.getBoundingSphere();
-  parent: PointCloudOctreeGeometryNode;
+  loading: boolean = false;
+  boundingSphere: Sphere;
+  parent: PointCloudOctreeGeometryNode | null = null;
   children: (PointCloudOctreeGeometryNode | undefined)[] = [];
   oneTimeDisposeHandlers: (() => void)[] = [];
 
@@ -49,6 +49,11 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
     this.name = name;
     this.pcoGeometry = pcoGeometry;
     this.boundingBox = boundingBox;
+    this.tightBoundingBox = new Box3().copy(boundingBox);
+
+    this.boundingSphere = boundingBox.getBoundingSphere();
+    this.tightBoundingSphere = this.tightBoundingBox.getBoundingSphere();
+
     this.index = parseInt(name.charAt(name.length - 1), 10);
   }
 

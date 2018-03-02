@@ -1,27 +1,29 @@
 import { Box3, EventDispatcher, Matrix4, Object3D, Points, Sphere, Vector3, Vector4 } from 'three';
 import { PointSizeType } from './materials/enums';
 import { PointCloudMaterial } from './materials/point-cloud-material';
+import { PointCloudOctree } from './point-cloud-octree';
 import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
-import { IPointCloudOctree, IPointCloudTreeNode } from './types';
+import { ProfileRequest } from './profile';
+import { IPointCloudTreeNode } from './types';
 
 export class PointCloudOctreeNode extends EventDispatcher implements IPointCloudTreeNode {
   needsTransformUpdate: boolean = true;
   sceneNode: Points | null = null;
   children: (IPointCloudTreeNode | undefined)[] = [];
-  pcoGeometry: PointCloudOctreeGeometry;
-  material: PointCloudMaterial;
-  visiblePointsTarget: number;
-  minimumNodePixelSize: number;
-  showBoundingBox: boolean;
+  pcoGeometry!: PointCloudOctreeGeometry;
+  material!: PointCloudMaterial;
+  visiblePointsTarget: number = 0;
+  minimumNodePixelSize: number = 0;
+  showBoundingBox: boolean = false;
   boundingBoxNode: Object3D | null = null;
-  loadQueue: any[];
-  visibleBounds: Box3;
-  visibleNodes: PointCloudOctreeNode;
-  visibleGeometry: PointCloudOctreeGeometry[];
-  profileRequests: any[];
-  pointSizeType: PointSizeType;
-  pointcloud: IPointCloudOctree;
+  loadQueue: any[] = [];
+  visibleBounds: Box3 = new Box3();
+  visibleNodes: PointCloudOctreeNode[] = [];
+  visibleGeometry: PointCloudOctreeGeometry[] = [];
+  profileRequests: ProfileRequest[] = [];
+  pointSizeType: PointSizeType = PointSizeType.ADAPTIVE;
+  pointcloud!: PointCloudOctree;
   pcIndex?: number;
   readonly loaded = true;
 

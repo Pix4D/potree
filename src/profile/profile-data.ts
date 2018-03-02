@@ -4,7 +4,7 @@ import { IProfile, IProfileData, IProfileSegment } from './types';
 
 export class ProfileData implements IProfileData {
   boundingBox = new Box3();
-  segments: IProfileSegment[];
+  segments: IProfileSegment[] = [];
 
   constructor(public profile: IProfile) {
     for (let i = 0; i < profile.points.length - 1; i++) {

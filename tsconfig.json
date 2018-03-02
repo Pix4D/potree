@@ -8,7 +8,6 @@
     "module": "esnext",
     "moduleResolution": "node",
     "strict": true,
-    "strictPropertyInitialization": false,
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,

@@ -7,8 +7,8 @@ export type Node = {
 };
 
 export class LRUItem {
-  next: LRUItem | null;
-  previous: LRUItem | null;
+  next: LRUItem | null = null;
+  previous: LRUItem | null = null;
   constructor(public node: Node) {}
 }
 

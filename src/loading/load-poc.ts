@@ -55,7 +55,9 @@ export function loadPOC(
   return url$.pipe(
     notNil(),
     take(1),
-    flatMap(url => {
+    flatMap(getUrl),
+    notNil(),
+    flatMap((url: string) => {
       return ajax({
         url,
         method: 'GET',

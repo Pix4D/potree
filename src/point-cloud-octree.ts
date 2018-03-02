@@ -23,7 +23,7 @@ import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node
 import { PointCloudOctreeNode } from './point-cloud-octree-node';
 import { PointCloudTree } from './point-cloud-tree';
 import { IProfile, IProfileRequestCallbacks, ProfileRequest } from './profile';
-import { IPointCloudOctree, IPointCloudTreeNode, IPotree } from './types';
+import { IPointCloudTreeNode, IPotree } from './types';
 import { computeTransformedBoundingBox } from './utils/bounds';
 import { clamp } from './utils/math';
 import { intersectSphereBack } from './utils/utils';
@@ -32,14 +32,14 @@ export interface PickParams {
   pickWindowSize: number;
 }
 
-export class PointCloudOctree extends PointCloudTree implements IPointCloudOctree {
+export class PointCloudOctree extends PointCloudTree {
   pcoGeometry: PointCloudOctreeGeometry;
   boundingBox: Box3;
   boundingSphere: Sphere;
   material: PointCloudMaterial;
   level: number = 0;
   maxLevel: number = Infinity;
-  visiblePointsTarget: number = 2 * 1000 * 1000;
+  visiblePointsTarget: number = 2_1000_1000;
   minimumNodePixelSize: number = 100;
   showBoundingBox: boolean = false;
   boundingBoxNodes: Object3D[] = [];
@@ -51,7 +51,6 @@ export class PointCloudOctree extends PointCloudTree implements IPointCloudOctre
   deepestVisibleLevel: number = 0;
   visibleGeometry: PointCloudOctreeGeometry[] = [];
   profileRequests: ProfileRequest[] = [];
-  pointSizeType: PointSizeType;
   pointBudget: number = Infinity;
   root: IPointCloudTreeNode | null = null;
 
@@ -78,14 +77,13 @@ export class PointCloudOctree extends PointCloudTree implements IPointCloudOctre
     this.position.copy(geometry.offset);
     this.updateMatrix();
 
-    this.initMaterial(material);
+    this.material = material || new PointCloudMaterial();
+    this.initMaterial(this.material);
 
     this.root = this.pcoGeometry.root;
   }
 
-  private initMaterial(material?: PointCloudMaterial): void {
-    this.material = material || new PointCloudMaterial();
-
+  private initMaterial(material: PointCloudMaterial): void {
     let box = [this.pcoGeometry.tightBoundingBox, this.getBoundingBoxWorld()].find(
       v => v !== undefined,
     );
@@ -96,8 +94,16 @@ export class PointCloudOctree extends PointCloudTree implements IPointCloudOctre
 
     this.updateMatrixWorld(true);
     box = computeTransformedBoundingBox(box, this.matrixWorld);
-    this.material.heightMin = box.min.z;
-    this.material.heightMax = box.max.z;
+    material.heightMin = box.min.z;
+    material.heightMax = box.max.z;
+  }
+
+  get pointSizeType(): PointSizeType {
+    return this.material.pointSizeType;
+  }
+
+  set pointSizeType(value: PointSizeType) {
+    this.material.pointSizeType = value;
   }
 
   setName(name: string): void {

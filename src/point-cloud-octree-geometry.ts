@@ -4,7 +4,7 @@ import { PointAttributes } from './point-attributes';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
 
 export class PointCloudOctreeGeometry {
-  root: PointCloudOctreeGeometryNode;
+  root!: PointCloudOctreeGeometryNode;
   octreeDir: string = '';
   hierarchyStepSize: number = -1;
   nodes: Record<string, PointCloudOctreeGeometryNode> = {};
