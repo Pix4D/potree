@@ -1,7 +1,7 @@
 import { Vector4 } from 'three';
-import { Classification } from './types';
+import { IClassification } from './types';
 
-export const CLASSIFICATION: Record<string, Classification> = {
+export const CLASSIFICATION: Record<string, IClassification> = {
   DEFAULT: {
     0: new Vector4(0.5, 0.5, 0.5, 1.0),
     1: new Vector4(0.5, 0.5, 0.5, 1.0),

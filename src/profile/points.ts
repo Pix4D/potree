@@ -19,7 +19,6 @@ export class Points implements IPoints {
       if (thisAttributes.includes(attribute) && otherAttributes.includes(attribute)) {
         // attribute in both, merge
 
-        // tslint:disable-next-line:variable-name
         const Type = this.data[attribute].constructor;
         const merged = new Type(this.data[attribute].length + points.data[attribute].length);
         merged.set(this.data[attribute], 0);
@@ -29,7 +28,6 @@ export class Points implements IPoints {
       } else if (thisAttributes.includes(attribute) && !otherAttributes.includes(attribute)) {
         // attribute only in this; take over this and expand to new size
 
-        // tslint:disable-next-line:variable-name
         const Type = this.data[attribute].constructor;
         const elementsPerPoint = this.data[attribute].length / this.numPoints;
         const expanded = new Type(elementsPerPoint * newSize);
@@ -39,7 +37,6 @@ export class Points implements IPoints {
       } else if (!thisAttributes.includes(attribute) && otherAttributes.includes(attribute)) {
         // attribute only in points to be added; take over new points and expand to new size
 
-        // tslint:disable-next-line:variable-name
         const Type = points.data[attribute].constructor;
         const elementsPerPoint = points.data[attribute].length / points.numPoints;
         const expanded = new Type(elementsPerPoint * newSize);

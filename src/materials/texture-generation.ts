@@ -7,7 +7,7 @@ import {
   RGBAFormat,
   Texture,
 } from 'three';
-import { Classification, Gradient } from '../materials/types';
+import { Gradient, IClassification } from '../materials/types';
 
 export function generateDataTexture(width: number, height: number, color: Color): Texture {
   const size = width * height;
@@ -59,7 +59,7 @@ export function generateGradientTexture(gradient: Gradient): Texture {
   return texture;
 }
 
-export function generateClassificationTexture(classification: Classification): Texture {
+export function generateClassificationTexture(classification: IClassification): Texture {
   const width = 256;
   const height = 256;
   const size = width * height;

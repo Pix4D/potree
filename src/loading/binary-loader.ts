@@ -62,7 +62,7 @@ export class BinaryLoader {
   }
 
   load(node: PointCloudOctreeGeometryNode) {
-    if (node.loaded || !(node.pcoGeometry as any).sign) {
+    if (node.loaded) {
       return;
     }
 
@@ -117,14 +117,14 @@ export class BinaryLoader {
     worker.onmessage = (e: WorkerResponse) => {
       const data = e.data;
 
-      if (!node.geometry) {
-        node.geometry = new BufferGeometry();
-      }
+      const geometry = node.geometry;
+      geometry.boundingBox = node.boundingBox;
 
-      this.addBufferAttributes(node.geometry, data.attributeBuffers);
-      this.addNormalAttribute(node.geometry, numPoints);
+      this.addBufferAttributes(geometry, data.attributeBuffers);
+      this.addIndices(geometry, data.indices);
+      this.addNormalAttribute(geometry, numPoints);
 
-      node.geometry.boundingBox = node.getBoundingBox();
+      node.geometry = geometry;
       node.mean = new Vector3().fromArray(data.mean);
       node.tightBoundingBox = this.getTightBoundingBox(data.tightBoundingBox);
       node.loaded = true;
@@ -197,14 +197,14 @@ export class BinaryLoader {
         geometry.addAttribute('normal', new BufferAttribute(new Float32Array(buffer), 3));
       } else if (this.isAttribute(property, PointAttributeName.NORMAL)) {
         geometry.addAttribute('normal', new BufferAttribute(new Float32Array(buffer), 3));
-      } else if (this.isAttribute(property, PointAttributeName.INDICES)) {
-        const bufferAttribute = new Uint8BufferAttribute(new Uint8Array(buffer), 4);
-        bufferAttribute.normalized = true;
-        geometry.addAttribute('indices', bufferAttribute);
-      } else if (this.isAttribute(property, PointAttributeName.SPACING)) {
-        geometry.addAttribute('spacing', new BufferAttribute(new Float32Array(buffer), 1));
       }
     });
+  }
+
+  private addIndices(geometry: BufferGeometry, indices: ArrayBuffer): void {
+    const indicesAttribute = new Uint8BufferAttribute(indices, 4);
+    indicesAttribute.normalized = true;
+    geometry.addAttribute('indices', indicesAttribute);
   }
 
   private addNormalAttribute(geometry: BufferGeometry, numPoints: number): void {

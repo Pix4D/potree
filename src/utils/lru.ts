@@ -24,7 +24,7 @@ export class LRU {
 
   private items = new Map<number, LRUItem>();
 
-  constructor(private pointLoadLimit: number = 1_000_000) {}
+  constructor(public pointBudget: number = 1_000_000) {}
 
   get size(): number {
     return this.items.size;
@@ -43,24 +43,31 @@ export class LRU {
       return;
     }
 
-    let item = this.items.get(node.id);
-    if (!item) {
-      // add to list
-      item = new LRUItem(node);
-      item.previous = this.last;
-      this.last = item;
-      if (item.previous) {
-        item.previous.next = item;
-      }
+    const item = this.items.get(node.id);
+    if (item) {
+      this.touchExisting(item);
+    } else {
+      this.addNew(node);
+    }
+  }
 
-      this.items.set(node.id, item);
-
-      if (!this.first) {
-        this.first = item;
-      }
-      this.numPoints += node.numPoints;
+  private addNew(node: Node): void {
+    const item = new LRUItem(node);
+    item.previous = this.last;
+    this.last = item;
+    if (item.previous) {
+      item.previous.next = item;
     }
 
+    if (!this.first) {
+      this.first = item;
+    }
+
+    this.items.set(node.id, item);
+    this.numPoints += node.numPoints;
+  }
+
+  private touchExisting(item: LRUItem): void {
     if (!item.previous) {
       // handle touch on first element
       if (item.next) {
@@ -102,18 +109,12 @@ export class LRU {
     } else {
       if (!item.previous) {
         this.first = item.next;
-
-        if (this.first) {
-          this.first.previous = null;
-        }
+        this.first!.previous = null;
       }
 
       if (!item.next) {
         this.last = item.previous;
-
-        if (this.last) {
-          this.last.next = null;
-        }
+        this.last!.next = null;
       }
 
       if (item.previous && item.next) {
@@ -135,7 +136,7 @@ export class LRU {
       return;
     }
 
-    while (this.numPoints > this.pointLoadLimit) {
+    while (this.numPoints > this.pointBudget) {
       const node = this.getLRUItem();
       if (node) {
         this.disposeDescendants(node);
@@ -146,16 +147,20 @@ export class LRU {
   disposeDescendants(node: Node): void {
     const stack: Node[] = [node];
 
-    let current: Node | undefined;
-    while ((current = stack.pop())) {
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+
       current.dispose();
       this.remove(current);
 
-      current.children.forEach(child => {
-        if (child && child.loaded) {
-          stack.push(child);
+      for (const key in current.children) {
+        if (current.children.hasOwnProperty(key)) {
+          const child = current.children[key];
+          if (child && child.loaded) {
+            stack.push(child);
+          }
         }
-      });
+      }
     }
   }
 }
