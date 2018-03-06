@@ -1,12 +1,7 @@
-/*
-** Binary Heap implementation in Javascript
-** From: http://eloquentjavascript.net/1st_edition/appendix2.htmlt
-**
-** Copyright (c) 2007 Marijn Haverbeke, last modified on November 28 2013.
-**
-** Licensed under a Creative Commons attribution-noncommercial license. 
-** All code in this book may also be considered licensed under an MIT license.
-*/
+/**
+ * from: http://eloquentjavascript.net/1st_edition/appendix2.html
+ *
+ */
 
 export function BinaryHeap(scoreFunction) {
   this.content = [];
@@ -117,5 +112,5 @@ BinaryHeap.prototype = {
       this.content[swap] = element;
       n = swap;
     }
-  }
+  },
 };

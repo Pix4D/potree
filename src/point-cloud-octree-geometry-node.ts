@@ -22,7 +22,6 @@ const NODE_STRIDE = 5;
 
 export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPointCloudTreeNode {
   id: number = PointCloudOctreeGeometryNode.idCount++;
-  needsTransformUpdate: boolean = true;
   name: string;
   pcoGeometry: PointCloudOctreeGeometry;
   index: number;
@@ -32,7 +31,6 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
   boundingBox: Box3;
   tightBoundingBox!: Box3;
   boundingSphere: Sphere;
-  tightBoundingSphere!: Sphere;
   mean: Vector3 = new Vector3();
   numPoints: number = 0;
   geometry: BufferGeometry = new BufferGeometry();
@@ -94,7 +92,7 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
    * Gets the url of the hierarchy file for this node.
    */
   getHierarchyUrl(): string {
-    return [this.pcoGeometry.octreeDir, this.getHierarchyBaseUrl(), `${this.name}.hrc`].join('/');
+    return `${this.pcoGeometry.octreeDir}/${this.getHierarchyBaseUrl()}/${this.name}.hrc`;
   }
 
   addChild(child: PointCloudOctreeGeometryNode): void {

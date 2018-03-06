@@ -15,7 +15,7 @@ import { LRU } from './utils/lru';
 export interface IQueueItem {
   weight: number;
   node: IPointCloudTreeNode;
-  pointcloud: number;
+  pointCloudIndex: number;
   parent?: IPointCloudTreeNode | null;
 }
 
@@ -77,7 +77,7 @@ export class Potree implements IPotree {
   // }
 
   private updateVisibility(
-    pointclouds: PointCloudOctree[],
+    pointClouds: PointCloudOctree[],
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
   ): IVisibilityUpdateResult {
@@ -91,7 +91,7 @@ export class Potree implements IPotree {
 
     // calculate object space frustum and cam pos and setup priority queue
     const { frustums, camObjPositions, priorityQueue } = this.updateVisibilityStructures(
-      pointclouds,
+      pointClouds,
       camera,
     );
 
@@ -100,51 +100,39 @@ export class Potree implements IPotree {
 
     while (priorityQueue.size() > 0) {
       const element = priorityQueue.pop()!;
-
       let node = element.node;
-      const parent = element.parent;
-      const pointcloud = pointclouds[element.pointcloud];
+      const parentNode = element.parent;
+      const pointCloud = pointClouds[element.pointCloudIndex];
 
-      {
-        // restrict to certain nodes for debugging
-        const allowedNodes = ['r'];
-        if (!allowedNodes.includes(node.name)) {
-          continue;
-        }
-      }
-
-      const box = node.boundingBox;
-      const frustum = frustums[element.pointcloud];
-      const camObjPos = camObjPositions[element.pointcloud];
-
-      let visible = frustum.intersectsBox(box);
-      visible = visible && !(numVisiblePoints + node.numPoints > this.pointBudget);
-      visible = visible && node.level < pointcloud.maxLevel;
-
-      if (
-        pointcloud.material.numClipBoxes > 0 &&
-        visible &&
-        pointcloud.material.clipMode === ClipMode.CLIP_OUTSIDE
-      ) {
-        visible = visible && this.intersectsClipBoxes(pointcloud, box);
-      }
-
-      lowestSpacing = Math.min(lowestSpacing, node.spacing);
+      // // restrict to certain nodes for debugging
+      // const allowedNodes = ['r', 'r0', 'r1', 'r2', 'r3', 'r4', 'r5'];
+      // if (!allowedNodes.includes(node.name)) {
+      //   continue;
+      // }
 
       if (numVisiblePoints + node.numPoints > this.pointBudget) {
         break;
       }
 
-      if (!visible) {
+      const frustum = frustums[element.pointCloudIndex];
+      const camObjPos = camObjPositions[element.pointCloudIndex];
+
+      if (
+        node.level > pointCloud.maxLevel ||
+        !frustum.intersectsBox(node.boundingBox) ||
+        this.shouldClip(pointCloud, node.boundingBox)
+      ) {
         continue;
       }
 
-      numVisiblePoints += node.numPoints;
-      pointcloud.numVisiblePoints += node.numPoints;
+      lowestSpacing = Math.min(lowestSpacing, node.spacing);
 
-      if (isGeometryNode(node) && (!parent || isTreeNode(parent))) {
+      numVisiblePoints += node.numPoints;
+      pointCloud.numVisiblePoints += node.numPoints;
+
+      if (isGeometryNode(node) && (!parentNode || isTreeNode(parentNode))) {
         if (node.loaded && loadedToGPUThisFrame < 2) {
-          node = pointcloud.toTreeNode(node, parent);
+          node = pointCloud.toTreeNode(node, parentNode);
           loadedToGPUThisFrame++;
         } else {
           unloadedGeometry.push(node);
@@ -152,30 +140,19 @@ export class Potree implements IPotree {
         }
       }
 
-      if (isTreeNode(node) && node.sceneNode) {
+      if (isTreeNode(node)) {
         this.getLRU().touch(node.geometryNode);
 
         node.sceneNode.visible = true;
-        node.sceneNode.material = pointcloud.material;
+        node.sceneNode.material = pointCloud.material;
 
         visibleNodes.push(node);
-        pointcloud.visibleNodes.push(node);
+        pointCloud.visibleNodes.push(node);
 
         node.sceneNode.updateMatrix();
-        node.sceneNode.matrixWorld.multiplyMatrices(pointcloud.matrixWorld, node.sceneNode.matrix);
+        node.sceneNode.matrixWorld.multiplyMatrices(pointCloud.matrixWorld, node.sceneNode.matrix);
 
-        if (pointcloud.showBoundingBox && !node.boundingBoxNode) {
-          const boxHelper = new Box3Helper(node.boundingBox);
-          boxHelper.matrixAutoUpdate = false;
-          pointcloud.boundingBoxNodes.push(boxHelper);
-          node.boundingBoxNode = boxHelper;
-          node.boundingBoxNode.matrix.copy(pointcloud.matrixWorld);
-        } else if (pointcloud.showBoundingBox && node.boundingBoxNode) {
-          node.boundingBoxNode.visible = true;
-          node.boundingBoxNode.matrix.copy(pointcloud.matrixWorld);
-        } else if (!pointcloud.showBoundingBox && node.boundingBoxNode) {
-          node.boundingBoxNode.visible = false;
-        }
+        this.updateBoundingBoxVisibility(pointCloud, node);
       }
 
       // add child nodes to priorityQueue
@@ -192,7 +169,7 @@ export class Potree implements IPotree {
         const projFactor = 0.5 * domHeight / (slope * distance);
         const screenPixelRadius = radius * projFactor;
 
-        if (screenPixelRadius < pointcloud.minimumNodePixelSize) {
+        if (screenPixelRadius < pointCloud.minimumNodePixelSize) {
           continue;
         }
 
@@ -203,7 +180,7 @@ export class Potree implements IPotree {
         }
 
         priorityQueue.push({
-          pointcloud: element.pointcloud,
+          pointCloudIndex: element.pointCloudIndex,
           node: child,
           parent: node,
           weight,
@@ -223,12 +200,36 @@ export class Potree implements IPotree {
     };
   }
 
-  private intersectsClipBoxes(pointcloud: PointCloudOctree, boundingBox: Box3): boolean {
-    const box2 = boundingBox.clone();
-    pointcloud.updateMatrixWorld(true);
-    box2.applyMatrix4(pointcloud.matrixWorld);
+  private updateBoundingBoxVisibility(
+    pointCloud: PointCloudOctree,
+    node: PointCloudOctreeNode,
+  ): void {
+    if (pointCloud.showBoundingBox && !node.boundingBoxNode) {
+      const boxHelper = new Box3Helper(node.boundingBox);
+      boxHelper.matrixAutoUpdate = false;
+      pointCloud.boundingBoxNodes.push(boxHelper);
+      node.boundingBoxNode = boxHelper;
+      node.boundingBoxNode.matrix.copy(pointCloud.matrixWorld);
+    } else if (pointCloud.showBoundingBox && node.boundingBoxNode) {
+      node.boundingBoxNode.visible = true;
+      node.boundingBoxNode.matrix.copy(pointCloud.matrixWorld);
+    } else if (!pointCloud.showBoundingBox && node.boundingBoxNode) {
+      node.boundingBoxNode.visible = false;
+    }
+  }
 
-    const clipBoxes = pointcloud.material.clipBoxes;
+  private shouldClip(pointCloud: PointCloudOctree, boundingBox: Box3): boolean {
+    const { material } = pointCloud;
+
+    if (material.numClipBoxes === 0 || material.clipMode !== ClipMode.CLIP_OUTSIDE) {
+      return false;
+    }
+
+    const box2 = boundingBox.clone();
+    pointCloud.updateMatrixWorld(true);
+    box2.applyMatrix4(pointCloud.matrixWorld);
+
+    const clipBoxes = material.clipBoxes;
     for (let i = 0; i < clipBoxes.length; i++) {
       const clipMatrixWorld = clipBoxes[i].matrix;
       const clipBoxWorld = new Box3(
@@ -244,7 +245,7 @@ export class Potree implements IPotree {
   }
 
   private updateVisibilityStructures(
-    pointclouds: PointCloudOctree[],
+    pointClouds: PointCloudOctree[],
     camera: PerspectiveCamera,
   ): {
     frustums: Frustum[];
@@ -255,23 +256,23 @@ export class Potree implements IPotree {
     const camObjPositions = [];
     const priorityQueue = new BinaryHeap<IQueueItem>(x => 1 / x.weight);
 
-    for (let i = 0; i < pointclouds.length; i++) {
-      const pointcloud = pointclouds[i];
+    for (let i = 0; i < pointClouds.length; i++) {
+      const pointCloud = pointClouds[i];
 
-      if (!pointcloud.initialized()) {
+      if (!pointCloud.initialized()) {
         continue;
       }
 
-      pointcloud.numVisiblePoints = 0;
-      pointcloud.deepestVisibleLevel = 0;
-      pointcloud.visibleNodes = [];
-      pointcloud.visibleGeometry = [];
+      pointCloud.numVisiblePoints = 0;
+      pointCloud.deepestVisibleLevel = 0;
+      pointCloud.visibleNodes = [];
+      pointCloud.visibleGeometry = [];
 
       // frustum in object space
       camera.updateMatrixWorld(true);
       const frustum = new Frustum();
       const viewI = camera.matrixWorldInverse;
-      const world = pointcloud.matrixWorld;
+      const world = pointCloud.matrixWorld;
       const proj = camera.projectionMatrix;
       const fm = new Matrix4()
         .multiply(proj)
@@ -287,27 +288,24 @@ export class Potree implements IPotree {
       const camObjPos = new Vector3().setFromMatrixPosition(camMatrixObject);
       camObjPositions.push(camObjPos);
 
-      if (pointcloud.visible && pointcloud.root !== null) {
+      if (pointCloud.visible && pointCloud.root !== null) {
         priorityQueue.push({
           weight: Number.MAX_VALUE,
-          node: pointcloud.root,
-          pointcloud: i,
+          node: pointCloud.root,
+          pointCloudIndex: i,
         });
       }
 
-      if (isTreeNode(pointcloud.root) && pointcloud.root.sceneNode) {
-        pointcloud.hideDescendants(pointcloud.root.sceneNode);
+      // Hide any previously visible nodes. We will later show only the needed ones.
+      if (isTreeNode(pointCloud.root)) {
+        pointCloud.hideDescendants(pointCloud.root.sceneNode);
       }
 
-      for (let j = 0; j < pointcloud.boundingBoxNodes.length; j++) {
-        pointcloud.boundingBoxNodes[j].visible = false;
+      for (let j = 0; j < pointCloud.boundingBoxNodes.length; j++) {
+        pointCloud.boundingBoxNodes[j].visible = false;
       }
     }
 
-    return {
-      frustums: frustums,
-      camObjPositions: camObjPositions,
-      priorityQueue: priorityQueue,
-    };
+    return { frustums, camObjPositions, priorityQueue };
   }
 }

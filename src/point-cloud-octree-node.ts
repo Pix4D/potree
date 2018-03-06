@@ -1,21 +1,17 @@
 import { Box3, EventDispatcher, Object3D, Points, Sphere } from 'three';
-import { PointCloudOctree } from './point-cloud-octree';
 import { PointCloudOctreeGeometryNode } from './point-cloud-octree-geometry-node';
 import { IPointCloudTreeNode } from './types';
 
 export class PointCloudOctreeNode extends EventDispatcher implements IPointCloudTreeNode {
-  needsTransformUpdate: boolean = true;
-  sceneNode: Points | null = null;
   children: (IPointCloudTreeNode | undefined)[] = [];
   boundingBoxNode: Object3D | null = null;
-  pointcloud!: PointCloudOctree;
   pcIndex?: number;
   readonly loaded = true;
 
   isTreeNode: boolean = true;
   isGeometryNode: boolean = false;
 
-  constructor(public geometryNode: PointCloudOctreeGeometryNode) {
+  constructor(public geometryNode: PointCloudOctreeGeometryNode, public sceneNode: Points) {
     super();
   }
 

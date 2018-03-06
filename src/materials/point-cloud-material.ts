@@ -103,7 +103,7 @@ export class PointCloudMaterial extends RawShaderMaterial {
     uColor: { type: 'c', value: new Color(0xffffff) },
     opacity: { type: 'f', value: 1.0 },
     size: { type: 'f', value: 1 },
-    minSize: { type: 'f', value: 2.0 },
+    minSize: { type: 'f', value: 1.0 },
     maxSize: { type: 'f', value: 50.0 },
     octreeSize: { type: 'f', value: 0 },
     bbSize: { type: 'fv', value: [0, 0, 0] },
@@ -146,7 +146,7 @@ export class PointCloudMaterial extends RawShaderMaterial {
     indices: { type: 'fv', value: [] },
   };
 
-  private _pointSizeType: PointSizeType = PointSizeType.FIXED;
+  private _pointSizeType: PointSizeType = PointSizeType.ADAPTIVE;
   private _shape: PointShape = PointShape.SQUARE;
   private _pointColorType: PointColorType = PointColorType.RGB;
   private _weighted = false;
@@ -168,7 +168,7 @@ export class PointCloudMaterial extends RawShaderMaterial {
 
     this.treeType = getValid(parameters.treeType, TreeType.OCTREE);
     this.size = getValid(parameters.size, 1.0);
-    this.minSize = getValid(parameters.minSize, 2.0);
+    this.minSize = getValid(parameters.minSize, 1.0);
     this.maxSize = getValid(parameters.maxSize, 50.0);
 
     this.classification = CLASSIFICATION.DEFAULT;
@@ -179,6 +179,7 @@ export class PointCloudMaterial extends RawShaderMaterial {
 
     this.vertexColors = VertexColors;
 
+    this.updateShaderSource();
     this.needsUpdate = true;
   }
 

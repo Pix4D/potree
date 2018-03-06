@@ -162,9 +162,7 @@ function loadRemainingHierarchy(
   nodes: Record<string, PointCloudOctreeGeometryNode>,
 ): void {
   for (let i = 1; i < data.hierarchy.length; i++) {
-    const name = data.hierarchy[i][0];
-    const numPoints = data.hierarchy[i][1];
-
+    const [name, numPoints] = data.hierarchy[i];
     const { index, parentName, level } = parseName(name);
     const parentNode = nodes[parentName];
 

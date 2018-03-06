@@ -136,7 +136,7 @@ export class LRU {
       return;
     }
 
-    while (this.numPoints > this.pointBudget) {
+    while (this.numPoints > this.pointBudget * 2) {
       const node = this.getLRUItem();
       if (node) {
         this.disposeDescendants(node);

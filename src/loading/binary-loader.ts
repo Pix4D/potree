@@ -117,14 +117,13 @@ export class BinaryLoader {
     worker.onmessage = (e: WorkerResponse) => {
       const data = e.data;
 
-      const geometry = node.geometry;
+      const geometry = (node.geometry = node.geometry || new BufferGeometry());
       geometry.boundingBox = node.boundingBox;
 
       this.addBufferAttributes(geometry, data.attributeBuffers);
       this.addIndices(geometry, data.indices);
       this.addNormalAttribute(geometry, numPoints);
 
-      node.geometry = geometry;
       node.mean = new Vector3().fromArray(data.mean);
       node.tightBoundingBox = this.getTightBoundingBox(data.tightBoundingBox);
       node.loaded = true;
