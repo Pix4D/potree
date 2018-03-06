@@ -6,11 +6,12 @@ import { Observable } from 'rxjs/Observable';
 import { ajax } from 'rxjs/observable/dom/ajax';
 import { flatMap, map, take } from 'rxjs/operators';
 import { Box3, Vector3 } from 'three';
-import { PointAttributeNameType, PointAttributes } from '../point-attributes';
+import { PointAttributes, PointAttributeStringName } from '../point-attributes';
 import { PointCloudOctreeGeometry } from '../point-cloud-octree-geometry';
 import { PointCloudOctreeGeometryNode } from '../point-cloud-octree-geometry-node';
 import { createChildAABB } from '../utils/bounds';
 import { notNil } from '../utils/rx';
+import { getIndexFromName } from '../utils/utils';
 import { Version } from '../version';
 import { BinaryLoader } from './binary-loader';
 import { GetUrlFn } from './types';
@@ -28,13 +29,14 @@ interface POCJson {
   version: string;
   octreeDir: string;
   projection: string;
-  scale: number;
-  spacing: number;
-  hierarchyStepSize: number;
-  hierarchy: [string, number][]; // [name, numPoints][]
-  pointAttributes: PointAttributeNameType[];
+  points: number;
   boundingBox: BoundingBoxData;
   tightBoundingBox?: BoundingBoxData;
+  pointAttributes: PointAttributeStringName[];
+  spacing: number;
+  scale: number;
+  hierarchyStepSize: number;
+  hierarchy: [string, number][]; // [name, numPoints][]
 }
 
 /**
@@ -140,7 +142,6 @@ function loadRoot(
   const name = 'r';
 
   const root = new PointCloudOctreeGeometryNode(name, pco, pco.boundingBox);
-  root.level = 0;
   root.hasChildren = true;
   root.spacing = pco.spacing;
 
@@ -167,7 +168,7 @@ function loadRemainingHierarchy(
     const { index, parentName, level } = parseName(name);
     const parentNode = nodes[parentName];
 
-    const boundingBox = createChildAABB(parentNode.getBoundingBox(), index);
+    const boundingBox = createChildAABB(parentNode.boundingBox, index);
     const node = new PointCloudOctreeGeometryNode(name, pco, boundingBox);
     node.level = level;
     node.numPoints = numPoints;
@@ -180,7 +181,7 @@ function loadRemainingHierarchy(
 
 function parseName(name: string): { index: number; parentName: string; level: number } {
   return {
-    index: parseInt(name.charAt(name.length - 1), 10),
+    index: getIndexFromName(name),
     parentName: name.substring(0, name.length - 1),
     level: name.length - 1,
   };

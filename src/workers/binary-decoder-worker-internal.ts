@@ -34,7 +34,7 @@ interface Ctx {
 
 export function handleMessage(event: MessageEvent) {
   const buffer = event.data.buffer;
-  const pointAttributes = event.data.pointAttributes;
+  const pointAttributes: IPointAttributes = event.data.pointAttributes;
 
   const ctx: Ctx = {
     attributeBuffers: {},
@@ -56,16 +56,39 @@ export function handleMessage(event: MessageEvent) {
     ctx.currentOffset += pointAttribute.byteSize;
   }
 
-  decodeAndAddAttribute(POINT_ATTRIBUTES.INDICES, ctx);
+  const indices = new ArrayBuffer(ctx.numPoints * 4);
+  const iIndices = new Uint32Array(indices);
+  for (let i = 0; i < ctx.numPoints; i++) {
+    iIndices[i] = i;
+  }
+
+  if (!ctx.attributeBuffers[PointAttributeName.CLASSIFICATION]) {
+    addEmptyClassificationBuffer(ctx);
+  }
 
   const message = {
     buffer: buffer,
     mean: ctx.mean,
     attributeBuffers: ctx.attributeBuffers,
     tightBoundingBox: { min: ctx.tightBoxMin, max: ctx.tightBoxMax },
+    indices,
   };
 
-  postMessage(message, '', ctx.transferables);
+  postMessage(message, ctx.transferables as any);
+}
+
+function addEmptyClassificationBuffer(ctx: Ctx): void {
+  const buffer = new ArrayBuffer(ctx.numPoints * 4);
+  const classifications = new Float32Array(buffer);
+
+  for (let i = 0; i < ctx.numPoints; i++) {
+    classifications[i] = 0;
+  }
+
+  ctx.attributeBuffers[PointAttributeName.CLASSIFICATION] = {
+    buffer,
+    attribute: POINT_ATTRIBUTES.CLASSIFICATION,
+  };
 }
 
 function decodeAndAddAttribute(attribute: IPointAttribute, ctx: Ctx): void {
@@ -94,8 +117,6 @@ function decodePointAttribute(attribute: IPointAttribute, ctx: Ctx): DecodedAttr
       return decodeNormalOct16(attribute, ctx);
     case PointAttributeName.NORMAL:
       return decodeNormal(attribute, ctx);
-    case PointAttributeName.INDICES:
-      return decodeIndices(attribute, ctx);
     default:
       return undefined;
   }
@@ -141,13 +162,13 @@ function decodePositionCartesian(attribute: IPointAttribute, ctx: Ctx): DecodedA
 }
 
 function decodeColor(attribute: IPointAttribute, ctx: Ctx): DecodedAttribute {
-  const buffer = new ArrayBuffer(ctx.numPoints * 4);
+  const buffer = new ArrayBuffer(ctx.numPoints * 3);
   const colors = new Uint8Array(buffer);
 
   for (let i = 0; i < ctx.numPoints; i++) {
-    colors[4 * i + 0] = ctx.data.getUint8(ctx.currentOffset + i * ctx.pointAttributes.byteSize + 0);
-    colors[4 * i + 1] = ctx.data.getUint8(ctx.currentOffset + i * ctx.pointAttributes.byteSize + 1);
-    colors[4 * i + 2] = ctx.data.getUint8(ctx.currentOffset + i * ctx.pointAttributes.byteSize + 2);
+    colors[3 * i + 0] = ctx.data.getUint8(ctx.currentOffset + i * ctx.pointAttributes.byteSize + 0);
+    colors[3 * i + 1] = ctx.data.getUint8(ctx.currentOffset + i * ctx.pointAttributes.byteSize + 1);
+    colors[3 * i + 2] = ctx.data.getUint8(ctx.currentOffset + i * ctx.pointAttributes.byteSize + 2);
   }
 
   return { buffer, attribute };
@@ -256,17 +277,6 @@ function decodeNormal(attribute: IPointAttribute, ctx: Ctx): DecodedAttribute {
     normals[3 * j + 0] = x;
     normals[3 * j + 1] = y;
     normals[3 * j + 2] = z;
-  }
-
-  return { buffer, attribute };
-}
-
-function decodeIndices(attribute: IPointAttribute, ctx: Ctx): DecodedAttribute {
-  const buffer = new ArrayBuffer(ctx.numPoints * 4);
-  const indices = new Uint32Array(buffer);
-
-  for (let i = 0; i < ctx.numPoints; i++) {
-    indices[i] = i;
   }
 
   return { buffer, attribute };

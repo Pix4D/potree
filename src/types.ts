@@ -5,6 +5,7 @@ import { PointCloudOctree } from './point-cloud-octree';
 import { LRU } from './utils/lru';
 
 export interface IPointCloudTreeNode {
+  name: string;
   needsTransformUpdate: boolean;
   spacing: number;
   level: number;
@@ -24,7 +25,6 @@ export interface IVisibilityUpdateResult {
 
 export interface IPotree {
   pointBudget: number;
-  numNodesLoading: number;
   maxNodesLoading: number;
 
   loadPointCloud(url$: Observable<string>, getUrl: GetUrlFn): Observable<PointCloudOctree>;

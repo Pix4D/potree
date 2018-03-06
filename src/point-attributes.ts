@@ -14,11 +14,6 @@ export enum PointAttributeName {
   NORMAL_SPHEREMAPPED = 8,
   NORMAL_OCT16 = 9,
   NORMAL = 10,
-  RETURN_NUMBER = 11,
-  NUMBER_OF_RETURNS = 12,
-  SOURCE_ID = 13,
-  INDICES = 14,
-  SPACING = 15,
 }
 
 export interface PointAttributeType {
@@ -26,8 +21,7 @@ export interface PointAttributeType {
   size: number;
 }
 
-// tslint:disable-next-line:variable-name
-export const PointAttributeTypes: Record<string, PointAttributeType> = {
+export const POINT_ATTRIBUTE_TYPES: Record<string, PointAttributeType> = {
   DATA_TYPE_DOUBLE: { ordinal: 0, size: 8 },
   DATA_TYPE_FLOAT: { ordinal: 1, size: 4 },
   DATA_TYPE_INT8: { ordinal: 2, size: 1 },
@@ -47,6 +41,12 @@ export interface IPointAttribute {
   byteSize: number;
 }
 
+export interface IPointAttributes {
+  attributes: IPointAttribute[];
+  byteSize: number;
+  size: number;
+}
+
 function makePointAttribute(
   name: PointAttributeName,
   type: PointAttributeType,
@@ -60,81 +60,73 @@ function makePointAttribute(
   };
 }
 
-export const POINT_ATTRIBUTES: Record<string, IPointAttribute> = {
+const RGBA_PACKED = makePointAttribute(
+  PointAttributeName.COLOR_PACKED,
+  POINT_ATTRIBUTE_TYPES.DATA_TYPE_INT8,
+  4,
+);
+
+export const POINT_ATTRIBUTES = {
   POSITION_CARTESIAN: makePointAttribute(
     PointAttributeName.POSITION_CARTESIAN,
-    PointAttributeTypes.DATA_TYPE_FLOAT,
+    POINT_ATTRIBUTE_TYPES.DATA_TYPE_FLOAT,
     3,
   ),
-  RGBA_PACKED: makePointAttribute(
-    PointAttributeName.COLOR_PACKED,
-    PointAttributeTypes.DATA_TYPE_INT8,
-    4,
-  ),
-  COLOR_PACKED: makePointAttribute(
-    PointAttributeName.COLOR_PACKED,
-    PointAttributeTypes.DATA_TYPE_INT8,
-    4,
-  ),
+  RGBA_PACKED,
+  COLOR_PACKED: RGBA_PACKED,
   RGB_PACKED: makePointAttribute(
     PointAttributeName.COLOR_PACKED,
-    PointAttributeTypes.DATA_TYPE_INT8,
+    POINT_ATTRIBUTE_TYPES.DATA_TYPE_INT8,
     3,
   ),
   NORMAL_FLOATS: makePointAttribute(
     PointAttributeName.NORMAL_FLOATS,
-    PointAttributeTypes.DATA_TYPE_FLOAT,
+    POINT_ATTRIBUTE_TYPES.DATA_TYPE_FLOAT,
     3,
   ),
-  FILLER_1B: makePointAttribute(PointAttributeName.FILLER, PointAttributeTypes.DATA_TYPE_UINT8, 1),
+  FILLER_1B: makePointAttribute(
+    PointAttributeName.FILLER,
+    POINT_ATTRIBUTE_TYPES.DATA_TYPE_UINT8,
+    1,
+  ),
   INTENSITY: makePointAttribute(
     PointAttributeName.INTENSITY,
-    PointAttributeTypes.DATA_TYPE_UINT16,
+    POINT_ATTRIBUTE_TYPES.DATA_TYPE_UINT16,
     1,
   ),
   CLASSIFICATION: makePointAttribute(
     PointAttributeName.CLASSIFICATION,
-    PointAttributeTypes.DATA_TYPE_UINT8,
+    POINT_ATTRIBUTE_TYPES.DATA_TYPE_UINT8,
     1,
   ),
   NORMAL_SPHEREMAPPED: makePointAttribute(
     PointAttributeName.NORMAL_SPHEREMAPPED,
-    PointAttributeTypes.DATA_TYPE_UINT8,
+    POINT_ATTRIBUTE_TYPES.DATA_TYPE_UINT8,
     2,
   ),
   NORMAL_OCT16: makePointAttribute(
     PointAttributeName.NORMAL_OCT16,
-    PointAttributeTypes.DATA_TYPE_UINT8,
+    POINT_ATTRIBUTE_TYPES.DATA_TYPE_UINT8,
     2,
   ),
-  NORMAL: makePointAttribute(PointAttributeName.NORMAL, PointAttributeTypes.DATA_TYPE_FLOAT, 3),
-  RETURN_NUMBER: makePointAttribute(
-    PointAttributeName.RETURN_NUMBER,
-    PointAttributeTypes.DATA_TYPE_UINT8,
-    1,
-  ),
+  NORMAL: makePointAttribute(PointAttributeName.NORMAL, POINT_ATTRIBUTE_TYPES.DATA_TYPE_FLOAT, 3),
 };
 
-export type PointAttributeNameType = keyof typeof POINT_ATTRIBUTES;
-
-export interface IPointAttributes {
-  attributes: IPointAttribute[];
-  byteSize: number;
-  size: number;
-}
+export type PointAttributeStringName = keyof typeof POINT_ATTRIBUTES;
 
 export class PointAttributes implements IPointAttributes {
   attributes: IPointAttribute[] = [];
   byteSize: number = 0;
   size: number = 0;
 
-  constructor(pointAttributeNames: PointAttributeNameType[]) {
-    (pointAttributeNames || []).forEach(attrName => {
-      const pointAttribute = POINT_ATTRIBUTES[attrName];
+  constructor(pointAttributeNames: PointAttributeStringName[] = []) {
+    for (let i = 0; i < pointAttributeNames.length; i++) {
+      const pointAttributeName = pointAttributeNames[i];
+      const pointAttribute = POINT_ATTRIBUTES[pointAttributeName];
       this.attributes.push(pointAttribute);
       this.byteSize += pointAttribute.byteSize;
       this.size++;
-    });
+    }
   }
 
   add(pointAttribute: IPointAttribute): void {

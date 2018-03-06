@@ -10,8 +10,9 @@ import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
 import { IPointCloudTreeNode } from './types';
 import { createChildAABB } from './utils/bounds';
 import { notNil } from './utils/rx';
+import { getIndexFromName } from './utils/utils';
 
-interface NodeData {
+export interface NodeData {
   children: number;
   numPoints: number;
   name: string;
@@ -29,17 +30,20 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
   spacing: number = 0;
   hasChildren: boolean = false;
   boundingBox: Box3;
-  tightBoundingBox: Box3;
-  tightBoundingSphere: Sphere;
+  tightBoundingBox!: Box3;
+  boundingSphere: Sphere;
+  tightBoundingSphere!: Sphere;
   mean: Vector3 = new Vector3();
   numPoints: number = 0;
   geometry: BufferGeometry = new BufferGeometry();
   loaded: boolean = false;
   loading: boolean = false;
-  boundingSphere: Sphere;
   parent: PointCloudOctreeGeometryNode | null = null;
   children: (PointCloudOctreeGeometryNode | undefined)[] = [];
   oneTimeDisposeHandlers: (() => void)[] = [];
+
+  isTreeNode: boolean = false;
+  isGeometryNode: boolean = true;
 
   private static idCount = 0;
 
@@ -47,26 +51,10 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
     super();
 
     this.name = name;
+    this.index = getIndexFromName(name);
     this.pcoGeometry = pcoGeometry;
     this.boundingBox = boundingBox;
-    this.tightBoundingBox = new Box3().copy(boundingBox);
-
     this.boundingSphere = boundingBox.getBoundingSphere();
-    this.tightBoundingSphere = this.tightBoundingBox.getBoundingSphere();
-
-    this.index = parseInt(name.charAt(name.length - 1), 10);
-  }
-
-  isTreeNode() {
-    return false;
-  }
-
-  getBoundingSphere(): Sphere {
-    return this.boundingSphere;
-  }
-
-  getBoundingBox(): Box3 {
-    return this.boundingBox;
   }
 
   getChildren(): PointCloudOctreeGeometryNode[] {
@@ -87,13 +75,17 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
    */
   getUrl(): string {
     const geometry = this.pcoGeometry;
+    const version = geometry.loader.version;
     const pathParts = [geometry.octreeDir];
 
-    if (geometry.loader && geometry.loader.version.equalOrHigher('1.5')) {
+    if (geometry.loader && version.equalOrHigher('1.5')) {
       pathParts.push(this.getHierarchyBaseUrl());
+      pathParts.push(this.name);
+    } else if (version.equalOrHigher('1.4')) {
+      pathParts.push(this.name);
+    } else if (version.upTo('1.3')) {
+      pathParts.push(this.name);
     }
-
-    pathParts.push(this.name);
 
     return pathParts.join('/');
   }
@@ -182,15 +174,18 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
   private loadHierarchy(node: PointCloudOctreeGeometryNode, buffer: ArrayBuffer) {
     const view = new DataView(buffer);
 
+    const firstNodeData = this.getNodeData(node.name, 0, view);
+    node.numPoints = firstNodeData.numPoints;
+
     // Nodes which need be visited.
-    const stack: NodeData[] = [this.getNodeData(node.name, 0, view)];
+    const stack: NodeData[] = [firstNodeData];
     // Nodes which have already been decoded. We will take nodes from the stack and place them here.
     const decoded: NodeData[] = [];
 
     let offset = NODE_STRIDE;
-    let stackNodeData;
+    while (stack.length > 0) {
+      const stackNodeData = stack.shift()!;
 
-    while ((stackNodeData = stack.shift())) {
       // From the last bit, all the way to the 8th one from the right.
       let mask = 1;
       for (let i = 0; i < 8; i++) {
@@ -203,7 +198,7 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
           offset += NODE_STRIDE; // Move over to the next node in the buffer.
         }
 
-        mask = mask << 1;
+        mask = mask * 2;
       }
 
       if (offset === buffer.byteLength) {
@@ -216,7 +211,6 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
     // Map containing all the nodes.
     const nodes = new Map<string, PointCloudOctreeGeometryNode>();
     nodes.set(node.name, node);
-
     decoded.forEach(nodeData => this.addNode(nodeData, node.pcoGeometry, nodes));
 
     node.loadPoints();
@@ -230,31 +224,25 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
     return { children: children, numPoints: numPoints, name };
   }
 
-  private addNode(
+  addNode(
     { name, numPoints, children }: NodeData,
     pco: PointCloudOctreeGeometry,
     nodes: Map<string, PointCloudOctreeGeometryNode>,
   ): void {
-    const index = parseInt(name.charAt(name.length - 1), 10);
+    const index = getIndexFromName(name);
     const parentName = name.substring(0, name.length - 1);
-    const parentNode = nodes.get(parentName);
-    if (!parentNode) {
-      return;
-    }
-
+    const parentNode = nodes.get(parentName)!;
+    const level = name.length - 1;
     const boundingBox = createChildAABB(parentNode.boundingBox, index);
 
     const node = new PointCloudOctreeGeometryNode(name, pco, boundingBox);
-    node.level = name.length - 1;
+    node.level = level;
     node.numPoints = numPoints;
     node.hasChildren = children > 0;
-    node.spacing = pco.spacing / Math.pow(2, node.level);
+    node.spacing = pco.spacing / Math.pow(2, level);
 
     parentNode.addChild(node);
-  }
-
-  getNumPoints(): number {
-    return this.numPoints;
+    nodes.set(name, node);
   }
 
   dispose(): void {
