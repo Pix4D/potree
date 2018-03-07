@@ -1,6 +1,7 @@
 import { Observable } from 'rxjs/Observable';
 import { map } from 'rxjs/operators';
 import { Box3, Frustum, Matrix4, PerspectiveCamera, Vector3, WebGLRenderer } from 'three';
+import { FEATURES } from './features';
 import { GetUrlFn, loadPOC } from './loading';
 import { ClipMode } from './materials/clipping';
 import { PointCloudOctree } from './point-cloud-octree';
@@ -20,10 +21,10 @@ export interface IQueueItem {
 }
 
 export class Potree implements IPotree {
-  maxNodesLoading: number = 5;
-
   private _pointBudget: number = 1_000_000;
-  private _lru = new LRU(this._pointBudget);
+  maxNodesLoading: number = 5;
+  features = FEATURES;
+  lru = new LRU(this._pointBudget);
 
   loadPointCloud(url$: Observable<string>, getUrl: GetUrlFn): Observable<PointCloudOctree> {
     return loadPOC(url$, getUrl).pipe(map(geometry => new PointCloudOctree(this, geometry)));
@@ -46,7 +47,7 @@ export class Potree implements IPotree {
       pointCloud.updateVisibleBounds();
     }
 
-    this.getLRU().freeMemory();
+    this.lru.freeMemory();
 
     return result;
   }
@@ -58,13 +59,9 @@ export class Potree implements IPotree {
   set pointBudget(value: number) {
     if (value !== this._pointBudget) {
       this._pointBudget = value;
-      this._lru.pointBudget = value;
-      this._lru.freeMemory();
+      this.lru.pointBudget = value;
+      this.lru.freeMemory();
     }
-  }
-
-  getLRU() {
-    return this._lru;
   }
 
   // getDEMWorkerInstance() {
@@ -141,7 +138,7 @@ export class Potree implements IPotree {
       }
 
       if (isTreeNode(node)) {
-        this.getLRU().touch(node.geometryNode);
+        this.lru.touch(node.geometryNode);
 
         node.sceneNode.visible = true;
         node.sceneNode.material = pointCloud.material;
@@ -264,7 +261,6 @@ export class Potree implements IPotree {
       }
 
       pointCloud.numVisiblePoints = 0;
-      pointCloud.deepestVisibleLevel = 0;
       pointCloud.visibleNodes = [];
       pointCloud.visibleGeometry = [];
 

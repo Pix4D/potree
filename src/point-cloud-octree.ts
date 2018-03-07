@@ -43,42 +43,40 @@ interface IPickState {
 }
 
 export class PointCloudOctree extends PointCloudTree {
+  potree: IPotree;
   pcoGeometry: PointCloudOctreeGeometry;
   boundingBox: Box3;
   boundingSphere: Sphere;
   material: PointCloudMaterial;
   level: number = 0;
   maxLevel: number = Infinity;
-  visiblePointsTarget: number = 2_000_000;
   minimumNodePixelSize: number = 150;
   showBoundingBox: boolean = false;
   boundingBoxNodes: Object3D[] = [];
-  loadQueue: any[] = [];
   visibleBounds: Box3 = new Box3();
   visibleNodes: PointCloudOctreeNode[] = [];
   numVisiblePoints: number = 0;
-  deepestVisibleLevel: number = 0;
   visibleGeometry: PointCloudOctreeGeometry[] = [];
   profileRequests: ProfileRequest[] = [];
-  pointBudget: number = Infinity;
   root: IPointCloudTreeNode | null = null;
 
   private visibleNodeTextureOffsets: Map<string, number> = new Map<string, number>();
   private pickState: IPickState | undefined;
 
   constructor(
-    public potree: IPotree,
-    geometry: PointCloudOctreeGeometry,
+    potree: IPotree,
+    pcoGeometry: PointCloudOctreeGeometry,
     material?: PointCloudMaterial,
   ) {
     super();
 
     this.name = '';
-    this.pcoGeometry = geometry;
-    this.boundingBox = this.pcoGeometry.boundingBox;
+    this.potree = potree;
+    this.pcoGeometry = pcoGeometry;
+    this.boundingBox = pcoGeometry.boundingBox;
     this.boundingSphere = this.boundingBox.getBoundingSphere();
 
-    this.position.copy(geometry.offset);
+    this.position.copy(pcoGeometry.offset);
     this.updateMatrix();
 
     this.material = material || new PointCloudMaterial();
@@ -88,20 +86,16 @@ export class PointCloudOctree extends PointCloudTree {
   }
 
   private initMaterial(material: PointCloudMaterial): void {
-    let box = [this.pcoGeometry.tightBoundingBox, this.getBoundingBoxWorld()].find(
-      v => v !== undefined,
+    this.updateMatrixWorld(true);
+
+    const { min, max } = computeTransformedBoundingBox(
+      this.pcoGeometry.tightBoundingBox || this.getBoundingBoxWorld(),
+      this.matrixWorld,
     );
 
-    if (!box) {
-      return;
-    }
-
-    this.updateMatrixWorld(true);
-    box = computeTransformedBoundingBox(box, this.matrixWorld);
-
-    const bWidth = box.max.z - box.min.z;
-    material.heightMin = box.min.z - 0.2 * bWidth;
-    material.heightMax = box.max.z + 0.2 * bWidth;
+    const bWidth = max.z - min.z;
+    material.heightMin = min.z - 0.2 * bWidth;
+    material.heightMax = max.z + 0.2 * bWidth;
   }
 
   get pointSizeType(): PointSizeType {
@@ -110,16 +104,6 @@ export class PointCloudOctree extends PointCloudTree {
 
   set pointSizeType(value: PointSizeType) {
     this.material.pointSizeType = value;
-  }
-
-  setName(name: string): void {
-    if (this.name !== name) {
-      this.name = name;
-    }
-  }
-
-  getName() {
-    return this.name;
   }
 
   toTreeNode(geometryNode: PointCloudOctreeGeometryNode, parent?: PointCloudOctreeNode | null) {
@@ -224,14 +208,15 @@ export class PointCloudOctree extends PointCloudTree {
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
   ): void {
+    const maxScale = Math.max(this.scale.x, this.scale.y, this.scale.z);
+
     material.fov = camera.fov * (Math.PI / 180);
     material.screenWidth = renderer.domElement.clientWidth;
     material.screenHeight = renderer.domElement.clientHeight;
-    material.spacing =
-      this.pcoGeometry.spacing * Math.max(this.scale.x, this.scale.y, this.scale.z);
     material.near = camera.near;
     material.far = camera.far;
     material.uniforms.octreeSize.value = this.pcoGeometry.boundingBox.getSize().x;
+    material.spacing = this.pcoGeometry.spacing * maxScale;
 
     if (
       material.pointSizeType === PointSizeType.ADAPTIVE ||

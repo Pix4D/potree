@@ -80,7 +80,7 @@ export class ProfileRequest implements IProfileRequest {
       if (node.loaded) {
         // add points to result
         intersectedNodes.push(node);
-        this.pointcloud.potree.getLRU().touch(node);
+        this.pointcloud.potree.lru.touch(node);
         this.highestLevelServed = node.level;
 
         if (node.level % node.pcoGeometry.hierarchyStepSize === 0 && node.hasChildren) {

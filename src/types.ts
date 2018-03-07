@@ -26,6 +26,7 @@ export interface IVisibilityUpdateResult {
 export interface IPotree {
   pointBudget: number;
   maxNodesLoading: number;
+  lru: LRU;
 
   loadPointCloud(url$: Observable<string>, getUrl: GetUrlFn): Observable<PointCloudOctree>;
 
@@ -34,6 +35,4 @@ export interface IPotree {
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
   ): IVisibilityUpdateResult;
-
-  getLRU(): LRU;
 }
