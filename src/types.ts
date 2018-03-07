@@ -1,4 +1,3 @@
-import { Observable } from 'rxjs/Observable';
 import { Box3, PerspectiveCamera, Sphere, WebGLRenderer } from 'three';
 import { GetUrlFn } from './loading/types';
 import { PointCloudOctree } from './point-cloud-octree';
@@ -28,7 +27,7 @@ export interface IPotree {
   maxNodesLoading: number;
   lru: LRU;
 
-  loadPointCloud(url$: Observable<string>, getUrl: GetUrlFn): Observable<PointCloudOctree>;
+  loadPointCloud(url: string, getUrl: GetUrlFn): Promise<PointCloudOctree>;
 
   updatePointClouds(
     pointClouds: PointCloudOctree[],

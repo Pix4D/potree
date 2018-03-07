@@ -1,6 +1,6 @@
 import { Color, IUniform as IThreeUniform, Vector4 } from 'three';
 
-export type Gradient = [number, Color][];
+export type IGradient = [number, Color][];
 
 export interface IClassification {
   [value: string]: Vector4;

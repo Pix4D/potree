@@ -2,14 +2,9 @@
 // Converted to Typescript and adapted from https://github.com/potree/potree
 // -------------------------------------------------------------------------------------------------
 
-import { Observable } from 'rxjs/Observable';
-import { ajax } from 'rxjs/observable/dom/ajax';
-import { of } from 'rxjs/observable/of';
-import { flatMap, map, take } from 'rxjs/operators';
 import { Box3, BufferAttribute, BufferGeometry, Uint8BufferAttribute, Vector3 } from 'three';
 import { PointAttributeName, PointAttributeType } from '../point-attributes';
 import { PointCloudOctreeGeometryNode } from '../point-cloud-octree-geometry-node';
-import { notNil } from '../utils/rx';
 import { Version } from '../version';
 import { GetUrlFn } from './types';
 
@@ -40,7 +35,7 @@ export class BinaryLoader {
   private workers: Worker[] = [];
 
   constructor({
-    getUrl = s => of(s),
+    getUrl = s => Promise.resolve(s),
     version,
     boundingBox,
     scale,
@@ -66,26 +61,10 @@ export class BinaryLoader {
       return;
     }
 
-    this.getUrl(this.getNodeUrl(node))
-      .pipe(take(1), notNil(), flatMap(url => this.fetchData(url)))
-      .subscribe(buffer => {
-        this.parse(node, buffer);
-      });
-  }
-
-  private fetchData(url: string): Observable<ArrayBuffer> {
-    return ajax({
-      url,
-      responseType: 'arraybuffer',
-      method: 'GET',
-      async: true,
-      crossDomain: true,
-      createXHR: () => {
-        const xhr = new XMLHttpRequest();
-        xhr.overrideMimeType('text/plain; charset=x-user-defined');
-        return xhr;
-      },
-    }).pipe(map(e => e.response));
+    return Promise.resolve(this.getUrl(this.getNodeUrl(node)))
+      .then(url => fetch(url, { mode: 'cors' }))
+      .then(res => res.arrayBuffer())
+      .then(buffer => this.parse(node, buffer));
   }
 
   private getNodeUrl(node: PointCloudOctreeGeometryNode): string {

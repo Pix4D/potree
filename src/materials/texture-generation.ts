@@ -8,7 +8,7 @@ import {
   RGBFormat,
   Texture,
 } from 'three';
-import { Gradient, IClassification } from '../materials/types';
+import { IClassification, IGradient } from '../materials/types';
 
 export function generateDataTexture(width: number, height: number, color: Color): Texture {
   const size = width * height;
@@ -31,7 +31,7 @@ export function generateDataTexture(width: number, height: number, color: Color)
   return texture;
 }
 
-export function generateGradientTexture(gradient: Gradient): Texture {
+export function generateGradientTexture(gradient: IGradient): Texture {
   const size = 64;
 
   const canvas = document.createElement('canvas');

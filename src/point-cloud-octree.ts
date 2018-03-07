@@ -366,29 +366,17 @@ export class PointCloudOctree extends PointCloudTree {
   }
 
   moveToOrigin(): void {
-    this.position.set(0, 0, 0);
-    this.updateMatrixWorld(true);
-    const box = this.boundingBox;
-    const transform = this.matrixWorld;
-    const tBox = computeTransformedBoundingBox(box, transform);
-    this.position.set(0, 0, 0).sub(tBox.getCenter());
+    this.position.set(0, 0, 0); // Reset, then the matrix will be updated in getBoundingBoxWorld()
+    this.position.set(0, 0, 0).sub(this.getBoundingBoxWorld().getCenter());
   }
 
   moveToGroundPlane(): void {
-    this.updateMatrixWorld(true);
-    const box = this.boundingBox;
-    const transform = this.matrixWorld;
-    const tBox = computeTransformedBoundingBox(box, transform);
-    this.position.y += -tBox.min.y;
+    this.position.y += -this.getBoundingBoxWorld().min.y;
   }
 
   getBoundingBoxWorld(): Box3 {
     this.updateMatrixWorld(true);
-    const box = this.boundingBox;
-    const transform = this.matrixWorld;
-    const tBox = computeTransformedBoundingBox(box, transform);
-
-    return tBox;
+    return computeTransformedBoundingBox(this.boundingBox, this.matrixWorld);
   }
 
   getVisibleExtent() {
@@ -402,7 +390,6 @@ export class PointCloudOctree extends PointCloudTree {
     params: Partial<PickParams> = {},
   ) {
     const pickWindowSize = params.pickWindowSize || 17;
-    const pickOutsideClipRegion = params.pickOutsideClipRegion || false;
 
     const width = Math.ceil(renderer.domElement.clientWidth);
     const height = Math.ceil(renderer.domElement.clientHeight);
@@ -416,29 +403,8 @@ export class PointCloudOctree extends PointCloudTree {
     const pickState = this.pickState ? this.pickState : (this.pickState = this.getPickState());
     const pickMaterial = pickState.material;
 
-    {
-      // update pick material
-      pickMaterial.pointSizeType = this.material.pointSizeType;
-      pickMaterial.shape = this.material.shape;
-
-      pickMaterial.size = this.material.size;
-      pickMaterial.minSize = this.material.minSize;
-      pickMaterial.maxSize = this.material.maxSize;
-      pickMaterial.classification = this.material.classification;
-
-      if (pickOutsideClipRegion) {
-        pickMaterial.clipMode = ClipMode.DISABLED;
-      } else {
-        pickMaterial.clipMode = this.material.clipMode;
-        if (this.material.clipMode === ClipMode.CLIP_OUTSIDE) {
-          pickMaterial.setClipBoxes(this.material.clipBoxes);
-        } else {
-          pickMaterial.setClipBoxes([]);
-        }
-      }
-
-      this.updateMaterial(pickMaterial, nodes, camera, renderer);
-    }
+    this.updatePickMaterial(pickMaterial, params);
+    this.updateMaterial(pickMaterial, nodes, camera, renderer);
 
     if (pickState.renderTarget.width !== width || pickState.renderTarget.height !== height) {
       this.updatePickRenderTarget(this.pickState);
@@ -477,7 +443,6 @@ export class PointCloudOctree extends PointCloudTree {
     // RENDER
     renderer.setRenderTarget(pickState.renderTarget);
     renderer.clearTarget(pickState.renderTarget, true, true, true);
-
     renderer.setScissor(
       Math.floor(pixelPos.x - (pickWindowSize - 1) / 2),
       Math.floor(pixelPos.y - (pickWindowSize - 1) / 2),
@@ -485,7 +450,6 @@ export class PointCloudOctree extends PointCloudTree {
       Math.floor(pickWindowSize),
     );
     renderer.setScissorTest(true);
-
     renderer.state.buffers.depth.setTest(pickMaterial.depthTest);
     (renderer.state.buffers.depth as any).setMask(pickMaterial.depthWrite);
     (renderer.state as any).setBlending(NoBlending);
@@ -582,22 +546,40 @@ export class PointCloudOctree extends PointCloudTree {
     const material = new PointCloudMaterial();
     material.pointColorType = PointColorType.POINT_INDEX;
 
-    const renderTarget = new WebGLRenderTarget(1, 1, {
-      minFilter: LinearFilter,
-      magFilter: NearestFilter,
-      format: RGBAFormat,
-    });
-
     return {
-      renderTarget: renderTarget,
+      renderTarget: this.makePickRenderTarget(),
       material: material,
       scene: scene,
     };
   }
 
+  private updatePickMaterial(pickMaterial: PointCloudMaterial, params: Partial<PickParams>): void {
+    const material = this.material;
+
+    pickMaterial.pointSizeType = material.pointSizeType;
+    pickMaterial.shape = material.shape;
+    pickMaterial.size = material.size;
+    pickMaterial.minSize = material.minSize;
+    pickMaterial.maxSize = material.maxSize;
+    pickMaterial.classification = material.classification;
+
+    if (params.pickOutsideClipRegion) {
+      pickMaterial.clipMode = ClipMode.DISABLED;
+    } else {
+      pickMaterial.clipMode = material.clipMode;
+      pickMaterial.setClipBoxes(
+        material.clipMode === ClipMode.CLIP_OUTSIDE ? material.clipBoxes : [],
+      );
+    }
+  }
+
   private updatePickRenderTarget(pickState: IPickState) {
     pickState.renderTarget.dispose();
-    pickState.renderTarget = new WebGLRenderTarget(1, 1, {
+    pickState.renderTarget = this.makePickRenderTarget();
+  }
+
+  private makePickRenderTarget() {
+    return new WebGLRenderTarget(1, 1, {
       minFilter: LinearFilter,
       magFilter: NearestFilter,
       format: RGBAFormat,

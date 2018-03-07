@@ -2,15 +2,11 @@
 // Converted to Typescript and adapted from https://github.com/potree/potree
 // -------------------------------------------------------------------------------------------------
 
-import { Observable } from 'rxjs/Observable';
-import { ajax } from 'rxjs/observable/dom/ajax';
-import { flatMap, map, take } from 'rxjs/operators';
 import { Box3, Vector3 } from 'three';
 import { PointAttributes, PointAttributeStringName } from '../point-attributes';
 import { PointCloudOctreeGeometry } from '../point-cloud-octree-geometry';
 import { PointCloudOctreeGeometryNode } from '../point-cloud-octree-geometry-node';
 import { createChildAABB } from '../utils/bounds';
-import { notNil } from '../utils/rx';
 import { getIndexFromName } from '../utils/utils';
 import { Version } from '../version';
 import { BinaryLoader } from './binary-loader';
@@ -41,34 +37,21 @@ interface POCJson {
 
 /**
  *
- * @param url$
- *    Observable which emits the url of the point cloud file (usually cloud.js).
- * @param signRelativeUrl
+ * @param url
+ *    The url of the point cloud file (usually cloud.js).
+ * @param getUrl
  *    Function which receives the relative URL of a point cloud chunk file which is to be loaded
- *    and shoud return an observable which emits the new url.
+ *    and shoud return a new url (e.g. signed) in the form of a string or a promise.
  *
  * @returns
  *    An observable which emits once when the first LOD of the point cloud is loaded.
  */
-export function loadPOC(
-  url$: Observable<string>,
-  getUrl: GetUrlFn,
-): Observable<PointCloudOctreeGeometry> {
-  return url$.pipe(
-    notNil(),
-    take(1),
-    flatMap(getUrl),
-    notNil(),
-    flatMap((url: string) => {
-      return ajax({
-        url,
-        method: 'GET',
-        responseType: 'text',
-        async: true,
-        crossDomain: true,
-      }).pipe(map(e => JSON.parse(e.response)), map(parse(url, getUrl)));
-    }),
-  );
+export function loadPOC(url: string, getUrl: GetUrlFn): Promise<PointCloudOctreeGeometry> {
+  return Promise.resolve(getUrl(url)).then(transformedUrl => {
+    return fetch(transformedUrl, { mode: 'cors' })
+      .then(res => res.json())
+      .then(parse(transformedUrl, getUrl));
+  });
 }
 
 function parse(url: string, getUrl: GetUrlFn) {

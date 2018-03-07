@@ -9,7 +9,6 @@ precision mediump int;
 uniform mat4 viewMatrix;
 uniform vec3 cameraPosition;
 
-
 uniform mat4 projectionMatrix;
 uniform float opacity;
 
@@ -109,7 +108,7 @@ void main() {
 
 				pointDiffuse += diffuse * pointLightColor[ i ] * pointDiffuseWeight * lDistance;
 
-						// specular
+				// specular
 
 				vec3 pointHalfVector = normalize( lVector + viewPosition );
 				float pointDotNormalHalf = max( dot( normal, pointHalfVector ), 0.0 );
@@ -225,13 +224,5 @@ void main() {
 		#if defined(use_edl)
 			gl_FragColor.a = vLogDepth;
 		#endif
-	#endif
-	
-	
-		
-	
-	
-	
-	
+	#endif	
 }
-

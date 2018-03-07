@@ -5,7 +5,7 @@
     "sourceMap": true,
     "declaration": true,
     "declarationDir": "declarations",
-    "module": "esnext",
+    "module": "es2015",
     "moduleResolution": "node",
     "strict": true,
     "noImplicitAny": true,

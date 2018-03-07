@@ -1,5 +1,3 @@
-import { Observable } from 'rxjs/Observable';
-import { map } from 'rxjs/operators';
 import { Box3, Frustum, Matrix4, PerspectiveCamera, Vector3, WebGLRenderer } from 'three';
 import { FEATURES } from './features';
 import { GetUrlFn, loadPOC } from './loading';
@@ -26,8 +24,8 @@ export class Potree implements IPotree {
   features = FEATURES;
   lru = new LRU(this._pointBudget);
 
-  loadPointCloud(url$: Observable<string>, getUrl: GetUrlFn): Observable<PointCloudOctree> {
-    return loadPOC(url$, getUrl).pipe(map(geometry => new PointCloudOctree(this, geometry)));
+  loadPointCloud(url: string, getUrl: GetUrlFn): Promise<PointCloudOctree> {
+    return loadPOC(url, getUrl).then(geometry => new PointCloudOctree(this, geometry));
   }
 
   updatePointClouds(

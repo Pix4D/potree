@@ -2,9 +2,6 @@
 precision mediump float;
 precision mediump int;
 
-
-
-
 #define max_clip_boxes 30
 
 attribute vec3 position;
@@ -68,7 +65,6 @@ uniform float wClassification;
 uniform float wReturnNumber;
 uniform float wSourceID;
 
-
 uniform sampler2D visibleNodes;
 uniform sampler2D gradient;
 uniform sampler2D classificationLUT;
@@ -82,7 +78,6 @@ varying vec3	vViewPosition;
 varying float 	vRadius;
 varying vec3	vWorldPosition;
 varying vec3	vNormal;
-
 
 // ---------------------
 // OCTREE
@@ -106,7 +101,6 @@ float numberOfOnes(float number, float index){
 	return numOnes;
 }
 
-
 /**
  * checks whether the bit at index is 1
  * number is treated as if it were an integer in the range 0-255
@@ -115,7 +109,6 @@ float numberOfOnes(float number, float index){
 bool isBitSet(float number, float index){
 	return mod(floor(number / pow(2.0, index)), 2.0) != 0.0;
 }
-
 
 /**
  * find the LOD at the point position
@@ -154,9 +147,7 @@ float getPointSizeAttenuation(){
 	return pow(1.9, getLOD());
 }
 
-
 #endif
-
 
 // ---------------------
 // KD-TREE

@@ -8,16 +8,16 @@ import {
   Texture,
   VertexColors,
 } from 'three';
-import { CLASSIFICATION } from './classification';
+import { DEFAULT_CLASSIFICATION } from './classification';
 import { ClipMode, IClipBox } from './clipping';
 import { PointColorType, PointShape, PointSizeType, TreeType } from './enums';
-import { GRADIENTS } from './gradients';
+import { SPECTRAL } from './gradients/spectral';
 import {
   generateClassificationTexture,
   generateDataTexture,
   generateGradientTexture,
 } from './texture-generation';
-import { Gradient, IClassification, IUniform } from './types';
+import { IClassification, IGradient, IUniform } from './types';
 
 export interface IPointCloudMaterialParameters {
   size: number;
@@ -27,7 +27,6 @@ export interface IPointCloudMaterialParameters {
 }
 
 export interface IPointCloudMaterialUniforms {
-  [name: string]: IUniform<any>;
   level: IUniform<number>;
   vnStart: IUniform<number>;
   spacing: IUniform<number>;
@@ -83,13 +82,13 @@ export class PointCloudMaterial extends RawShaderMaterial {
   private _useClipBox: boolean = false;
 
   // Textures
-  visibleNodesTexture: Texture;
-  private _gradient = GRADIENTS.SPECTRAL;
-  gradientTexture = generateGradientTexture(this._gradient);
-  private _classification: IClassification = CLASSIFICATION.DEFAULT;
-  classificationTexture: Texture = generateClassificationTexture(this._classification);
+  readonly visibleNodesTexture: Texture;
+  private _gradient = SPECTRAL;
+  private gradientTexture = generateGradientTexture(this._gradient);
+  private _classification: IClassification = DEFAULT_CLASSIFICATION;
+  private classificationTexture: Texture = generateClassificationTexture(this._classification);
 
-  uniforms: IPointCloudMaterialUniforms = {
+  uniforms: IPointCloudMaterialUniforms & { [name: string]: IUniform<any> } = {
     level: { type: 'f', value: 0.0 },
     vnStart: { type: 'f', value: 0.0 },
     spacing: { type: 'f', value: 1.0 },
@@ -160,7 +159,7 @@ export class PointCloudMaterial extends RawShaderMaterial {
     this.visibleNodesTexture.minFilter = NearestFilter;
     this.visibleNodesTexture.magFilter = NearestFilter;
 
-    this.uniforms.visibleNodes.value = this.visibleNodesTexture;
+    this.setUniform('visibleNodes', this.visibleNodesTexture);
 
     function getValid<T>(a: T | undefined, b: T): T {
       return a === undefined ? b : a;
@@ -171,7 +170,7 @@ export class PointCloudMaterial extends RawShaderMaterial {
     this.minSize = getValid(parameters.minSize, 1.0);
     this.maxSize = getValid(parameters.maxSize, 50.0);
 
-    this.classification = CLASSIFICATION.DEFAULT;
+    this.classification = DEFAULT_CLASSIFICATION;
 
     this.defaultAttributeValues.normal = [0, 0, 0];
     this.defaultAttributeValues.classification = [0, 0, 0];
@@ -184,8 +183,8 @@ export class PointCloudMaterial extends RawShaderMaterial {
   }
 
   updateShaderSource() {
-    this.vertexShader = this.applyDefines(require('raw-loader!./shaders/pointcloud.vs'));
-    this.fragmentShader = this.applyDefines(require('raw-loader!./shaders/pointcloud.fs'));
+    this.vertexShader = this.applyDefines(require('./shaders/pointcloud.vs'));
+    this.fragmentShader = this.applyDefines(require('./shaders/pointcloud.fs'));
 
     if (this.opacity === 1.0) {
       this.blending = NoBlending;
@@ -305,36 +304,39 @@ export class PointCloudMaterial extends RawShaderMaterial {
       this.numClipBoxes !== clipBoxes.length && (clipBoxes.length === 0 || this.numClipBoxes === 0);
 
     this.numClipBoxes = clipBoxes.length;
-    this.uniforms.clipBoxCount.value = this.numClipBoxes;
+    this.setUniform('clipBoxCount', this.numClipBoxes);
 
     if (doUpdate) {
       this.updateShaderSource();
     }
 
-    this.uniforms.clipBoxes.value = new Float32Array(this.numClipBoxes * 16);
+    const clipBoxesLength = this.numClipBoxes * 16;
+    const clipBoxesArray = new Float32Array(clipBoxesLength);
 
     for (let i = 0; i < this.numClipBoxes; i++) {
       const box = clipBoxes[i];
 
-      this.uniforms.clipBoxes.value.set(box.inverse.elements, 16 * i);
+      clipBoxesArray.set(box.inverse.elements, 16 * i);
     }
 
-    for (let i = 0; i < this.uniforms.clipBoxes.value.length; i++) {
-      if (Number.isNaN(this.uniforms.clipBoxes.value[i])) {
-        this.uniforms.clipBoxes.value[i] = Infinity;
+    for (let i = 0; i < clipBoxesLength; i++) {
+      if (isNaN(clipBoxesArray[i])) {
+        clipBoxesArray[i] = Infinity;
       }
     }
+
+    this.setUniform('clipBoxes', clipBoxesArray);
   }
 
-  get gradient(): Gradient {
+  get gradient(): IGradient {
     return this._gradient;
   }
 
-  set gradient(value: Gradient) {
+  set gradient(value: IGradient) {
     if (this._gradient !== value) {
       this._gradient = value;
       this.gradientTexture = generateGradientTexture(this._gradient);
-      this.uniforms.gradient.value = this.gradientTexture;
+      this.setUniform('gradient', this.gradientTexture);
     }
   }
 
@@ -368,15 +370,15 @@ export class PointCloudMaterial extends RawShaderMaterial {
 
   private recomputeClassification(): void {
     this.classificationTexture = generateClassificationTexture(this._classification);
-    this.uniforms.classificationLUT.value = this.classificationTexture;
+    this.setUniform('classificationLUT', this.classificationTexture);
   }
 
   get spacing(): number {
-    return this.uniforms.spacing.value;
+    return this.getUniform('spacing');
   }
 
   set spacing(value: number) {
-    this.uniforms.spacing.value = value;
+    this.setUniform('spacing', value);
   }
 
   get useClipBox(): boolean {
@@ -402,52 +404,52 @@ export class PointCloudMaterial extends RawShaderMaterial {
   }
 
   get fov(): number {
-    return this.uniforms.fov.value;
+    return this.getUniform('fov');
   }
 
   set fov(value: number) {
-    this.uniforms.fov.value = value;
+    this.setUniform('fov', value);
   }
 
   get screenWidth(): number {
-    return this.uniforms.screenWidth.value;
+    return this.getUniform('screenWidth');
   }
 
   set screenWidth(value: number) {
-    this.uniforms.screenWidth.value = value;
+    this.setUniform('screenWidth', value);
   }
 
   get screenHeight(): number {
-    return this.uniforms.screenHeight.value;
+    return this.getUniform('screenHeight');
   }
 
   set screenHeight(value: number) {
-    this.uniforms.screenHeight.value = value;
+    this.setUniform('screenHeight', value);
   }
 
   get near(): number {
-    return this.uniforms.near.value;
+    return this.getUniform('near');
   }
 
   set near(value: number) {
-    this.uniforms.near.value = value;
+    this.setUniform('near', value);
   }
 
   get far(): number {
-    return this.uniforms.far.value;
+    return this.getUniform('far');
   }
 
   set far(value: number) {
-    this.uniforms.far.value = value;
+    this.setUniform('far', value);
   }
 
   get opacity(): number {
-    return this.uniforms.opacity.value;
+    return this.getUniform('opacity');
   }
 
   set opacity(value: number) {
     if (this.uniforms && this.uniforms.opacity.value !== value) {
-      this.uniforms.opacity.value = value;
+      this.setUniform('opacity', value);
       this.updateShaderSource();
     }
   }
@@ -464,12 +466,12 @@ export class PointCloudMaterial extends RawShaderMaterial {
   }
 
   get depthMap(): Texture | null {
-    return this.uniforms.depthMap.value;
+    return this.getUniform('depthMap');
   }
 
   set depthMap(value: Texture | null) {
     if (this.depthMap !== value) {
-      this.uniforms.depthMap.value = value;
+      this.setUniform('depthMap', value);
       this.updateShaderSource();
     }
   }
@@ -508,7 +510,7 @@ export class PointCloudMaterial extends RawShaderMaterial {
   }
 
   get color(): Color {
-    return this.uniforms.uColor.value;
+    return this.getUniform('uColor');
   }
 
   set color(value: Color) {
@@ -540,19 +542,19 @@ export class PointCloudMaterial extends RawShaderMaterial {
   }
 
   get bbSize(): [number, number, number] {
-    return this.uniforms.bbSize.value;
+    return this.getUniform('bbSize');
   }
 
   set bbSize(value: [number, number, number]) {
-    this.uniforms.bbSize.value = value;
+    this.setUniform('bbSize', value);
   }
 
   get size(): number {
-    return this.uniforms.size.value;
+    return this.getUniform('size');
   }
 
   set size(value: number) {
-    this.uniforms.size.value = value;
+    this.setUniform('size', value);
   }
 
   get elevationRange(): [number, number] {
@@ -565,146 +567,159 @@ export class PointCloudMaterial extends RawShaderMaterial {
   }
 
   get heightMin(): number {
-    return this.uniforms.heightMin.value;
+    return this.getUniform('heightMin');
   }
 
   set heightMin(value: number) {
-    this.uniforms.heightMin.value = value;
+    this.setUniform('heightMin', value);
   }
 
   get heightMax(): number {
-    return this.uniforms.heightMax.value;
+    return this.getUniform('heightMax');
   }
 
   set heightMax(value: number) {
-    this.uniforms.heightMax.value = value;
+    this.setUniform('heightMax', value);
   }
 
   get transition(): number {
-    return this.uniforms.transition.value;
+    return this.getUniform('transition');
   }
 
   set transition(value: number) {
-    this.uniforms.transition.value = value;
+    this.setUniform('transition', value);
   }
 
   get intensityRange(): [number, number] {
-    return this.uniforms.intensityRange.value;
+    return this.getUniform('intensityRange');
   }
 
   set intensityRange(value: [number, number]) {
-    this.uniforms.intensityRange.value = value;
+    this.setUniform('intensityRange', value);
   }
 
   get intensityGamma(): number {
-    return this.uniforms.intensityGamma.value;
+    return this.getUniform('intensityGamma');
   }
 
   set intensityGamma(value: number) {
-    this.uniforms.intensityGamma.value = value;
+    this.setUniform('intensityGamma', value);
   }
 
   get intensityContrast(): number {
-    return this.uniforms.intensityContrast.value;
+    return this.getUniform('intensityContrast');
   }
 
   set intensityContrast(value: number) {
-    this.uniforms.intensityContrast.value = value;
+    this.setUniform('intensityContrast', value);
   }
 
   get intensityBrightness(): number {
-    return this.uniforms.intensityBrightness.value;
+    return this.getUniform('intensityBrightness');
   }
 
   set intensityBrightness(value: number) {
-    this.uniforms.intensityBrightness.value = value;
+    this.setUniform('intensityBrightness', value);
   }
 
   get rgbGamma(): number {
-    return this.uniforms.rgbGamma.value;
+    return this.getUniform('rgbGamma');
   }
 
   set rgbGamma(value: number) {
-    this.uniforms.rgbGamma.value = value;
+    this.setUniform('rgbGamma', value);
   }
 
   get rgbContrast(): number {
-    return this.uniforms.rgbContrast.value;
+    return this.getUniform('rgbContrast');
   }
 
   set rgbContrast(value: number) {
-    this.uniforms.rgbContrast.value = value;
+    this.setUniform('rgbContrast', value);
   }
 
   get rgbBrightness(): number {
-    return this.uniforms.rgbBrightness.value;
+    return this.getUniform('rgbBrightness');
   }
 
   set rgbBrightness(value: number) {
-    this.uniforms.rgbBrightness.value = value;
+    this.setUniform('rgbBrightness', value);
   }
 
   get weightRGB(): number {
-    return this.uniforms.wRGB.value;
+    return this.getUniform('wRGB');
   }
 
   set weightRGB(value: number) {
-    this.uniforms.wRGB.value = value;
+    this.setUniform('wRGB', value);
   }
 
   get weightIntensity(): number {
-    return this.uniforms.wIntensity.value;
+    return this.getUniform('wIntensity');
   }
 
   set weightIntensity(value: number) {
-    this.uniforms.wIntensity.value = value;
+    this.setUniform('wIntensity', value);
   }
 
   get weightElevation(): number {
-    return this.uniforms.wElevation.value;
+    return this.getUniform('wElevation');
   }
 
   set weightElevation(value: number) {
-    this.uniforms.wElevation.value = value;
+    this.setUniform('wElevation', value);
   }
 
   get weightClassification(): number {
-    return this.uniforms.wClassification.value;
+    return this.getUniform('wClassification');
   }
 
   set weightClassification(value: number) {
-    this.uniforms.wClassification.value = value;
+    this.setUniform('wClassification', value);
   }
 
   get weightReturnNumber(): number {
-    return this.uniforms.wReturnNumber.value;
+    return this.getUniform('wReturnNumber');
   }
 
   set weightReturnNumber(value: number) {
-    this.uniforms.wReturnNumber.value = value;
+    this.setUniform('wReturnNumber', value);
   }
 
   get weightSourceID(): number {
-    return this.uniforms.wSourceID.value;
+    return this.getUniform('wSourceID');
   }
 
   set weightSourceID(value: number) {
-    this.uniforms.wSourceID.value = value;
+    this.setUniform('wSourceID', value);
   }
 
   get minSize(): number {
-    return this.uniforms.minSize.value;
+    return this.getUniform('minSize');
   }
 
   set minSize(value: number) {
-    this.uniforms.minSize.value = value;
+    this.setUniform('minSize', value);
   }
 
   get maxSize(): number {
-    return this.uniforms.maxSize.value;
+    return this.getUniform('maxSize');
   }
 
   set maxSize(value: number) {
-    this.uniforms.maxSize.value = value;
+    this.setUniform('maxSize', value);
+  }
+
+  getUniform<K extends keyof IPointCloudMaterialUniforms>(
+    name: K,
+  ): IPointCloudMaterialUniforms[K]['value'] {
+    return this.uniforms[name].value;
+  }
+
+  setUniform<K extends keyof IPointCloudMaterialUniforms>(
+    name: K,
+    value: IPointCloudMaterialUniforms[K]['value'],
+  ): void {
+    this.uniforms[name].value = value;
   }
 }

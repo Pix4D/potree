@@ -3,13 +3,10 @@
  * Potree License: https://github.com/potree/potree/blob/1.5/LICENSE
  */
 
-import { ajax } from 'rxjs/observable/dom/ajax';
-import { switchMap, take } from 'rxjs/operators';
 import { Box3, BufferGeometry, EventDispatcher, Sphere, Vector3 } from 'three';
 import { PointCloudOctreeGeometry } from './point-cloud-octree-geometry';
 import { IPointCloudTreeNode } from './types';
 import { createChildAABB } from './utils/bounds';
-import { notNil } from './utils/rx';
 import { getIndexFromName } from './utils/utils';
 
 export interface NodeData {
@@ -131,10 +128,10 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
       return;
     }
 
-    this.pcoGeometry.loader
-      .getUrl(this.getHierarchyUrl())
-      .pipe(take(1), notNil(), switchMap(url => this.loadHierarchyData(url)))
-      .subscribe(e => this.loadHierarchy(this, e.response));
+    Promise.resolve(this.pcoGeometry.loader.getUrl(this.getHierarchyUrl()))
+      .then(url => fetch(url, { mode: 'cors' }))
+      .then(res => res.json())
+      .then(json => this.loadHierarchy(this, json));
   }
 
   /**
@@ -151,21 +148,6 @@ export class PointCloudOctreeGeometryNode extends EventDispatcher implements IPo
     }
 
     return path.slice(0, -1);
-  }
-
-  private loadHierarchyData(url: string) {
-    return ajax({
-      url,
-      responseType: 'arraybuffer',
-      method: 'GET',
-      async: true,
-      crossDomain: true,
-      createXHR: () => {
-        const xhr = new XMLHttpRequest();
-        xhr.overrideMimeType('text/plain; charset=x-user-defined');
-        return xhr;
-      },
-    });
   }
 
   // tslint:disable:no-bitwise
