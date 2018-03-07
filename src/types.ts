@@ -6,8 +6,9 @@ import { LRU } from './utils/lru';
 
 export interface IPointCloudTreeNode {
   name: string;
-  spacing: number;
   level: number;
+  index: number;
+  spacing: number;
   boundingBox: Box3;
   boundingSphere: Sphere;
   loaded: boolean;

@@ -29,7 +29,7 @@ import { isGeometryNode, isTreeNode } from './type-predicates';
 import { IPointCloudTreeNode, IPotree } from './types';
 import { computeTransformedBoundingBox } from './utils/bounds';
 import { clamp } from './utils/math';
-import { getIndexFromName } from './utils/utils';
+import { byLevelAndIndex } from './utils/utils';
 
 export interface PickParams {
   pickWindowSize: number;
@@ -63,8 +63,7 @@ export class PointCloudOctree extends PointCloudTree {
   pointBudget: number = Infinity;
   root: IPointCloudTreeNode | null = null;
 
-  private visibleNodeTextureOffsets: Map<string, number> | null = null;
-
+  private visibleNodeTextureOffsets: Map<string, number> = new Map<string, number>();
   private pickState: IPickState | undefined;
 
   constructor(
@@ -134,15 +133,13 @@ export class PointCloudOctree extends PointCloudTree {
 
     sceneNode.onBeforeRender = this.makeOnBeforeRender(node);
 
-    const childIndex = getIndexFromName(geometryNode.name);
-
     if (parent) {
       parent.sceneNode.add(sceneNode);
-      parent.children[childIndex] = node;
+      parent.children[geometryNode.index] = node;
 
       geometryNode.oneTimeDisposeHandlers.push(function() {
         parent.sceneNode.remove(node.sceneNode);
-        parent.children[childIndex] = geometryNode;
+        parent.children[geometryNode.index] = geometryNode;
       });
     } else {
       this.root = node;
@@ -253,60 +250,36 @@ export class PointCloudOctree extends PointCloudTree {
     const data = texture.image.data;
     data.fill(0);
 
-    this.visibleNodeTextureOffsets = new Map<string, number>();
+    this.visibleNodeTextureOffsets.clear();
 
-    // copy array
-    visibleNodes = visibleNodes.slice();
+    const nodes = visibleNodes.slice().sort(byLevelAndIndex);
 
-    // sort by level and index, e.g. r, r0, r3, r4, r01, r07, r30, ...
-    const sort = function(a: PointCloudOctreeNode, b: PointCloudOctreeNode) {
-      const na = a.geometryNode.name;
-      const nb = b.geometryNode.name;
-      if (na.length !== nb.length) {
-        return na.length - nb.length;
-      } else if (na < nb) {
-        return -1;
-      } else if (na > nb) {
-        return 1;
-      } else {
-        return 0;
-      }
-    };
-    visibleNodes.sort(sort);
-
-    for (let i = 0; i < visibleNodes.length; i++) {
-      const node = visibleNodes[i];
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
 
       this.visibleNodeTextureOffsets.set(node.name, i);
 
-      const children = [];
+      const visibleChildren: PointCloudOctreeNode[] = [];
       for (let j = 0; j < 8; j++) {
         const child = node.children[j];
-        if (isTreeNode(child) && child.sceneNode.visible && visibleNodes.indexOf(child) !== -1) {
-          children.push(child);
+        if (isTreeNode(child) && child.sceneNode.visible && nodes.indexOf(child) > -1) {
+          visibleChildren.push(child);
         }
       }
 
-      children.sort(function(a, b) {
-        if (a.geometryNode.name < b.geometryNode.name) {
-          return -1;
-        } else if (a.geometryNode.name > b.geometryNode.name) {
-          return 1;
-        } else {
-          return 0;
-        }
-      });
+      visibleChildren.sort(byLevelAndIndex);
 
       data[i * 3 + 0] = 0;
       data[i * 3 + 1] = 0;
       data[i * 3 + 2] = 0;
-      for (let j = 0; j < children.length; j++) {
-        const child = children[j];
-        const index = getIndexFromName(child.geometryNode.name);
-        data[i * 3 + 0] += Math.pow(2, index);
+
+      for (let j = 0; j < visibleChildren.length; j++) {
+        const child = visibleChildren[j];
+
+        data[i * 3 + 0] += Math.pow(2, child.index);
 
         if (j === 0) {
-          const vArrayIndex = visibleNodes.indexOf(child);
+          const vArrayIndex = nodes.indexOf(child);
           // tslint:disable-next-line:no-bitwise
           data[i * 3 + 1] = (vArrayIndex - i) >> 8;
           data[i * 3 + 2] = (vArrayIndex - i) % 256;

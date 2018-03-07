@@ -28,12 +28,20 @@ export class PointCloudOctreeNode extends EventDispatcher implements IPointCloud
     return children;
   }
 
-  get numPoints(): number {
-    return this.geometryNode.numPoints;
+  get name() {
+    return this.geometryNode.name;
   }
 
   get level(): number {
     return this.geometryNode.level;
+  }
+
+  get numPoints(): number {
+    return this.geometryNode.numPoints;
+  }
+
+  get index() {
+    return this.geometryNode.index;
   }
 
   get boundingSphere(): Sphere {
@@ -46,9 +54,5 @@ export class PointCloudOctreeNode extends EventDispatcher implements IPointCloud
 
   get spacing() {
     return this.geometryNode.spacing;
-  }
-
-  get name() {
-    return this.geometryNode.name;
   }
 }
